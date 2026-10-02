@@ -36,9 +36,6 @@ const won = new Intl.NumberFormat("ko-KR");
 
 export function FundSection() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [data, setData] = useState<FundData | null>(null);
   const [period, setPeriod] = useState("all");
   const [category, setCategory] = useState("all");
@@ -60,8 +57,6 @@ export function FundSection() {
       })
       .then((result) => { if (result) setData(result); })
       .catch((error) => toast.error(error instanceof Error ? error.message : "기금 내역을 불러오지 못했습니다."));
-    const timer = window.setTimeout(() => void lock(false), 30 * 60 * 1000);
-    return () => window.clearTimeout(timer);
   }, [authenticated]);
 
   const filtered = useMemo(() => {
@@ -72,41 +67,17 @@ export function FundSection() {
   const periods = useMemo(() => Array.from(new Set(data?.transactions.map((item) => item.transactionDate.slice(0, 7)) ?? [])), [data]);
   const categories = useMemo(() => Array.from(new Set(data?.transactions.map((item) => item.category) ?? [])), [data]);
 
-  async function login(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const response = await fetch("/api/fund/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ password }) });
-      const result = await response.json() as { authenticated?: boolean; error?: string };
-      if (!response.ok || !result.authenticated) throw new Error(result.error ?? "기금 내역을 열지 못했습니다.");
-      setPassword("");
-      setAuthenticated(true);
-      toast.success("제작실 기금 내역을 열었습니다.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "기금 내역을 열지 못했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function lock(showToast = true) {
-    await fetch("/api/fund/logout", { method: "POST" }).catch(() => undefined);
-    setAuthenticated(false);
-    setData(null);
-    if (showToast) toast.success("제작실 기금을 잠갔습니다.");
-  }
-
   if (authenticated === null) return <div className="grid min-h-[460px] place-items-center text-primary"><LoaderCircle className="size-7 animate-spin" /></div>;
 
   if (!authenticated) {
-    return <div className="grid min-h-[560px] place-items-center"><Card className="w-full max-w-md rounded-3xl border-border/80 px-2 py-2 shadow-[0_28px_80px_rgba(38,33,28,0.12)]"><CardContent className="p-7 text-center sm:p-9"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary/10 text-primary"><LockKeyhole className="size-7" /></div><h2 className="mt-6 text-2xl font-semibold">제작실 기금</h2><p className="mt-3 leading-7 text-muted-foreground">계좌와 입출금 내역은 별도 비밀번호로 보호됩니다.</p><form className="mt-7 space-y-4 text-left" onSubmit={login}><div className="space-y-2"><Label htmlFor="fund-password">기금 비밀번호</Label><div className="relative"><Input id="fund-password" type={showPassword ? "text" : "password"} value={password} onChange={(event) => setPassword(event.target.value)} placeholder="비밀번호 입력" className="h-12 rounded-xl pr-11" autoComplete="current-password" required /><button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 보기"}>{showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}</button></div></div><Button className="h-12 w-full rounded-xl" disabled={busy}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <KeyRound className="size-4" />}기금 내역 열기</Button></form><div className="mt-5 flex items-center justify-center gap-2 text-xs text-muted-foreground"><ShieldCheck className="size-4" />인증 후 30분이 지나면 자동으로 잠깁니다.</div></CardContent></Card></div>;
+    return <div className="grid min-h-[460px] place-items-center"><Card className="w-full max-w-md rounded-3xl border-border/80 px-2 py-2"><CardContent className="p-7 text-center sm:p-9"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand"><LockKeyhole className="size-7" /></div><h2 className="mt-6 text-2xl font-semibold">제작실 기금</h2><p className="mt-3 leading-7 text-muted-foreground">제작실 기금은 직책이 원장인 교직원만 열람할 수 있습니다.</p></CardContent></Card></div>;
   }
 
   if (!data) return <div className="grid min-h-[460px] place-items-center text-primary"><LoaderCircle className="size-7 animate-spin" /></div>;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card p-4 shadow-[0_10px_35px_rgba(38,33,28,0.06)] sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><p className="font-semibold">{data.accountLabel}</p>{data.demo && <Badge variant="secondary" className="rounded-full">샘플 데이터</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">민감한 계좌 정보는 현재 인증 세션에서만 표시됩니다.</p></div><Button variant="outline" className="rounded-xl" onClick={() => void lock()}><LockKeyhole className="size-4" />잠금</Button></div>
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card p-4 shadow-[0_10px_35px_rgba(38,33,28,0.06)] sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><p className="font-semibold">{data.accountLabel}</p>{data.demo && <Badge variant="secondary" className="rounded-full">샘플 데이터</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">원장 계정에서만 표시되는 정보입니다.</p></div></div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <FundSummary label="현재 잔액" value={`${won.format(data.currentBalance)}원`} icon={WalletCards} tone="indigo" />

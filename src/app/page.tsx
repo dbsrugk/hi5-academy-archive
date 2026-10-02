@@ -38,6 +38,7 @@ import {
   Wallet,
   ZoomIn,
   ChevronDown,
+  UserCog,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -79,13 +80,16 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { FundSection } from "@/components/archive/fund-section";
+import { LoginGate } from "@/components/archive/login-gate";
+import { MembersSection } from "@/components/archive/members-section";
+import { getMe } from "@/archive-api";
 import { ComplianceSection } from "@/components/archive/compliance-section";
 import { ProductionRequestsSection } from "@/components/archive/production-requests-section";
 import { PromotionsSection } from "@/components/archive/promotions-section";
 
 type Role = "staff" | "admin";
 type ArchiveSection = "events" | "marketing" | "meetings";
-type Section = ArchiveSection | "promotions" | "requests" | "fund" | "compliance";
+type Section = ArchiveSection | "promotions" | "requests" | "fund" | "compliance" | "members";
 type PublishStatus = "draft" | "published";
 
 type Program = {
@@ -1119,14 +1123,50 @@ export default function Home() {
     return () => lifecycle.abort();
   }, [role]);
 
+  const me = role ? getMe() : null;
+
+  // #admin 주소로 들어오면 관리자에게 회원 관리 화면을 연다
+  useEffect(() => {
+    if (role === "admin" && location.hash === "#admin") setSection("members");
+    if (role !== "admin" && section === "members") setSection("events");
+    if (section === "fund" && getMe()?.title !== "원장") setSection("events");
+  }, [role, section]);
+
+  // 이미지 우클릭·드래그 저장 방지 (상세 팝업 포함)
+  useEffect(() => {
+    if (!role) return;
+    const block = (event: Event) => { if ((event.target as HTMLElement | null)?.tagName === "IMG") event.preventDefault(); };
+    document.addEventListener("contextmenu", block);
+    document.addEventListener("dragstart", block);
+    return () => { document.removeEventListener("contextmenu", block); document.removeEventListener("dragstart", block); };
+  }, [role]);
+
+  // 접속·열람 기록 (2분마다 접속 신호)
+  useEffect(() => {
+    if (!role) return;
+    const ping = (body: Record<string, string> = {}) => fetch("/api/ping", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => undefined);
+    const timer = window.setInterval(() => void ping(), 120000);
+    return () => window.clearInterval(timer);
+  }, [role]);
+  useEffect(() => {
+    if (!role) return;
+    void fetch("/api/ping", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: section, kind: "view" }) }).catch(() => undefined);
+  }, [role, section]);
+  useEffect(() => {
+    const opened = selectedEvent?.title ?? selectedAsset?.title ?? selectedMeeting?.title;
+    if (!role || !opened) return;
+    void fetch("/api/ping", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: opened, kind: "open" }) }).catch(() => undefined);
+  }, [role, selectedEvent, selectedAsset, selectedMeeting]);
+
   const relatedTitles = useMemo(() => new Map(events.map((event) => [event.id, event.title])), [events]);
-  const sectionLabel = section === "events" ? "이벤트" : section === "promotions" ? "홍보" : section === "requests" ? "제작 요청" : section === "marketing" ? "마케팅 제작물" : section === "meetings" ? "회의록" : section === "compliance" ? "연간 이수 관리" : "제작실 기금";
-  const sectionHeading = section === "events" ? "지점별 이벤트 기록" : section === "promotions" ? "홍보 활동 기록과 통계" : section === "requests" ? "제작 요청" : section === "marketing" ? "마케팅 디자인 아카이브" : section === "meetings" ? "회의록 아카이브" : section === "compliance" ? "연간 이수 관리" : "제작실 기금";
-  const sectionDescription = section === "events" ? "대상, 날짜, 예산으로 필요한 행사 사례를 빠르게 찾아보세요." : section === "promotions" ? "센텀·김해·명지 캠퍼스의 홍보 기록과 실적을 한눈에 비교하세요." : section === "requests" ? "캠퍼스 요청부터 승인, 제작 진행, 완료까지 한곳에서 관리하세요." : section === "marketing" ? "완성된 제작물과 원본 파일을 찾아 다음 캠페인에 재활용하세요." : section === "meetings" ? "파트별 회의 안건과 합의사항, 후속 업무를 한곳에서 확인하세요." : section === "compliance" ? "캠퍼스별 필수 이수 현황과 이수증 등록 여부를 관리하세요." : "별도 비밀번호로 보호된 제작실 공동기금 내역을 확인하세요.";
+  const sectionLabel = section === "members" ? "회원 관리" : section === "events" ? "이벤트" : section === "promotions" ? "홍보" : section === "requests" ? "제작 요청" : section === "marketing" ? "마케팅 제작물" : section === "meetings" ? "회의록" : section === "compliance" ? "연간 이수 관리" : "제작실 기금";
+  const sectionHeading = section === "members" ? "회원 관리" : section === "events" ? "지점별 이벤트 기록" : section === "promotions" ? "홍보 활동 기록과 통계" : section === "requests" ? "제작 요청" : section === "marketing" ? "마케팅 디자인 아카이브" : section === "meetings" ? "회의록 아카이브" : section === "compliance" ? "연간 이수 관리" : "제작실 기금";
+  const sectionDescription = section === "members" ? "가입 신청 승인, 직책·관리자 지정, 접속·열람 기록을 관리하세요." : section === "events" ? "대상, 날짜, 예산으로 필요한 행사 사례를 빠르게 찾아보세요." : section === "promotions" ? "센텀·김해·명지 캠퍼스의 홍보 기록과 실적을 한눈에 비교하세요." : section === "requests" ? "캠퍼스 요청부터 승인, 제작 진행, 완료까지 한곳에서 관리하세요." : section === "marketing" ? "완성된 제작물과 원본 파일을 찾아 다음 캠페인에 재활용하세요." : section === "meetings" ? "파트별 회의 안건과 합의사항, 후속 업무를 한곳에서 확인하세요." : section === "compliance" ? "캠퍼스별 필수 이수 현황과 이수증 등록 여부를 관리하세요." : "원장만 열람할 수 있는 제작실 공동기금 내역입니다.";
   const resultCount = section === "events" ? events.length : section === "marketing" ? assets.length : section === "meetings" ? meetings.length : null;
 
   function changeSection(next: Section) {
     setSection(next);
+    try { history.replaceState(null, "", next === "members" ? "#admin" : location.pathname + location.search); } catch { /* 무시 */ }
     resetFilters();
   }
 
@@ -1164,7 +1204,7 @@ export default function Home() {
   }
 
   if (!sessionChecked) return <FullScreenLoading />;
-  if (!role) return <LoginScreen onLogin={setRole} />;
+  if (!role) return <LoginGate onLogin={setRole} />;
 
   return (
     <SidebarProvider>
@@ -1215,11 +1255,13 @@ export default function Home() {
                     <FileCheck2 aria-hidden="true" /><span>연간 이수 관리</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                {me?.title === "원장" && (
                 <SidebarMenuItem>
                   <SidebarMenuButton isActive={section === "fund"} tooltip="제작실 기금" onClick={() => changeSection("fund")}>
                     <LockKeyhole aria-hidden="true" /><span>제작실 기금</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                )}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -1233,6 +1275,11 @@ export default function Home() {
                       <Plus aria-hidden="true" /><span>새 자료 등록</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton isActive={section === "members"} tooltip="회원 관리" onClick={() => changeSection("members")}>
+                      <UserCog aria-hidden="true" /><span>회원 관리</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
@@ -1244,8 +1291,8 @@ export default function Home() {
               {role === "admin" ? <ShieldCheck className="size-4" /> : <KeyRound className="size-4" />}
             </div>
             <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-              <p className="truncate text-sm font-medium">{role === "admin" ? "본사 관리자" : demoMode ? "체험판 열람" : "직원 열람 모드"}</p>
-              <p className="truncate text-[13px] text-sidebar-foreground/60">{demoMode ? "인증 없이 둘러보기" : "인증키 접속"}</p>
+              <p className="truncate text-sm font-medium">{me ? `${me.name} ${me.title}` : "교직원"}</p>
+              <p className="truncate text-[13px] text-sidebar-foreground/60">{me ? `${me.campus}캠퍼스 · ${role === "admin" ? "관리자" : "교직원"}` : ""}</p>
             </div>
           </div>
           <SidebarMenu>
@@ -1255,6 +1302,7 @@ export default function Home() {
       </Sidebar>
 
       <SidebarInset className="min-w-0 bg-[var(--archive-canvas)]">
+        {me && <Watermark text={`${me.campus} ${me.name} · ${new Date().toISOString().slice(0, 10)}`} />}
         <header className="sticky top-0 z-20 flex h-12 items-center justify-between border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl md:px-7">
           <div className="flex items-center gap-2 text-sm"><SidebarTrigger className="size-8 md:hidden" /><span className="hidden text-muted-foreground sm:inline">아카이브</span><span className="hidden text-muted-foreground/50 sm:inline">/</span><h2 className="font-medium">{sectionLabel}</h2></div>
           <div className="flex items-center gap-2">
@@ -1283,7 +1331,7 @@ export default function Home() {
             />
           )}
 
-          {section === "promotions" ? <PromotionsSection role={role} demoMode={demoMode} /> : section === "requests" ? <ProductionRequestsSection role={role} demoMode={demoMode} onOpenMarketing={() => changeSection("marketing")} /> : section === "compliance" ? <ComplianceSection role={role} demoMode={demoMode} /> : section === "fund" ? <FundSection /> : section === "events" ? (
+          {section === "promotions" ? <PromotionsSection role={role} demoMode={demoMode} /> : section === "requests" ? <ProductionRequestsSection role={role} demoMode={demoMode} onOpenMarketing={() => changeSection("marketing")} /> : section === "compliance" ? <ComplianceSection role={role} demoMode={demoMode} /> : section === "fund" ? <FundSection /> : section === "members" ? <MembersSection /> : section === "events" ? (
             events.length ? <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{events.map((event) => <EventCard key={event.id} event={event} role={role} onOpen={setSelectedEvent} onStatus={updateStatus} onDelete={deleteRecord} />)}</div> : <EmptyState onReset={resetFilters} />
           ) : section === "marketing" ? assets.length ? (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{assets.map((asset) => <MarketingCard key={asset.id} asset={asset} role={role} onOpen={setSelectedAsset} onStatus={updateStatus} onDelete={deleteRecord} />)}</div>
@@ -1316,43 +1364,8 @@ export default function Home() {
   );
 }
 
-function LoginScreen({ onLogin }: { onLogin: (role: Role) => void }) {
-  const [key, setKey] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function login(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      const response = await fetch("/api/auth/login", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ key }) });
-      const data = await response.json() as { role?: Role; error?: string };
-      if (!response.ok || !data.role) return toast.error(data.error ?? "로그인하지 못했습니다.");
-      onLogin(data.role);
-      toast.success(data.role === "admin" ? "본사 관리자로 접속했습니다." : "직원 모드로 접속했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <main className="grid min-h-screen place-items-center bg-[var(--archive-canvas)] p-5">
-      <Card className="w-full max-w-md rounded-3xl border-border/70 px-2 py-2 shadow-[0_28px_80px_rgba(38,33,28,0.12)]">
-        <CardContent className="p-7 sm:p-9">
-          <div className="flex items-center gap-4">
-            <div className="grid h-16 w-24 shrink-0 place-items-center rounded-xl bg-white p-1.5 ring-1 ring-border/60"><Image src="./hi5-logo.webp" alt="Hi5" width={128} height={78} className="h-full w-full object-contain" priority /></div>
-            <div><p className="text-sm font-semibold text-primary">하이파이브미술학원</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">행정마케팅파트</h1></div>
-          </div>
-          <p className="mt-3 leading-7 text-muted-foreground">직원용 인증키 또는 본사 관리자 인증키로 접속해 주세요.</p>
-          <form className="mt-7 space-y-4" onSubmit={login}><div className="space-y-2"><Label htmlFor="access-key">인증키</Label><Input id="access-key" type="password" value={key} onChange={(event) => setKey(event.target.value)} placeholder="인증키 입력" className="h-12 rounded-xl" autoFocus required /></div>
-            
-            <Button className="h-12 w-full rounded-xl" disabled={busy}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <KeyRound className="size-4" />}접속하기</Button>
-          </form>
-          
-        </CardContent>
-      </Card>
-      <Toaster richColors position="top-center" />
-    </main>
-  );
+function Watermark({ text }: { text: string }) {
+  return <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-[70] grid select-none grid-cols-3 content-around gap-y-24 overflow-hidden opacity-[0.07] print:opacity-20">{Array.from({ length: 18 }, (_, index) => <span key={index} className="-rotate-[24deg] whitespace-nowrap text-center text-sm font-semibold text-foreground">{text}</span>)}</div>;
 }
 
 function SearchPanel(props: {

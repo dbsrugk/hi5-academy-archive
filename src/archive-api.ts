@@ -10,12 +10,29 @@ const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 const FN = `${SUPABASE_URL}/functions/v1/archive-api/api`;
 
 const TOKEN_KEY = "hi5-archive-token";
-const FUND_KEY = "hi5-archive-fund-token";
+const COOKIE = "ha_s";
 const storage = {
   get(key: string, session = false) { try { return (session ? sessionStorage : localStorage).getItem(key); } catch { return null; } },
   set(key: string, value: string | null, session = false) { try { const s = session ? sessionStorage : localStorage; if (value) s.setItem(key, value); else s.removeItem(key); } catch { /* 저장 불가 브라우저 */ } },
 };
-const tokenExpired = (token: string | null) => !token || Number(token.split(".")[1] ?? 0) * 1000 < Date.now();
+export type Me = { id: string; campus: string; title: string; name: string; isAdmin: boolean };
+function payload(token: string | null): (Me & { exp: number }) | null {
+  if (!token || !token.includes(".")) return null;
+  try {
+    const b = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
+    const p = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b), (c) => c.charCodeAt(0))));
+    return { id: p.id, campus: p.c, name: p.n, title: p.t, isAdmin: Boolean(p.a), exp: p.exp };
+  } catch { return null; }
+}
+const tokenExpired = (token: string | null) => { const p = payload(token); return !p || p.exp * 1000 < Date.now(); };
+let currentMe: Me | null = null;
+export function getMe() { return currentMe; }
+function saveToken(token: string | null) {
+  storage.set(TOKEN_KEY, token);
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = token ? `${COOKIE}=${token}; Path=/; Max-Age=${60 * 60 * 24 * 14}; SameSite=Lax${secure}` : `${COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+}
+function signOut() { saveToken(null); currentMe = null; currentRole = null; }
 
 let currentRole: Role | null = null;
 const fileCache = new Map<string, { url: string; at: number }>();
@@ -44,13 +61,12 @@ async function call(path: string, body: Json = {}) {
       apikey: SUPABASE_KEY,
       authorization: `Bearer ${SUPABASE_KEY}`,
       ...(token ? { "x-archive-token": token } : {}),
-      ...(storage.get(FUND_KEY, true) ? { "x-fund-token": storage.get(FUND_KEY, true)! } : {}),
     },
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && path !== "auth/login" && path !== "fund/login") { storage.set(TOKEN_KEY, null); currentRole = null; }
+    if (response.status === 401 || data.logout) signOut();
     throw new ApiError(response.status, data.error ?? "요청을 처리하지 못했습니다.");
   }
   return data;
@@ -370,30 +386,43 @@ async function route(method: string, path: string, params: URLSearchParams, init
   try {
     if (head === "auth") {
       if (id === "login") {
-        const data = await call("auth/login", { key: (await readBody()).key ?? "" });
-        storage.set(TOKEN_KEY, data.token); currentRole = data.role;
-        return json({ role: data.role });
+        const b = await readBody();
+        const data = await call("auth/login", { campus: b.campus, name: b.name, pin: b.pin });
+        if (!data.ok) return json({ error: data.msg ?? "로그인하지 못했습니다." }, 401);
+        saveToken(data.token); currentMe = data.me; currentRole = data.me.isAdmin ? "admin" : "staff";
+        return json({ role: currentRole, me: currentMe });
       }
-      if (id === "logout") { storage.set(TOKEN_KEY, null); storage.set(FUND_KEY, null, true); currentRole = null; return json({ ok: true }); }
+      if (id === "apply") {
+        const data = await call("auth/apply", await readBody());
+        return json(data.ok ? { ok: true } : { error: data.msg ?? "신청하지 못했습니다." }, data.ok ? 200 : 400);
+      }
+      if (id === "logout") { signOut(); return json({ ok: true }); }
       if (id === "session") {
-        if (tokenExpired(storage.get(TOKEN_KEY))) { storage.set(TOKEN_KEY, null); return json({ authenticated: false, role: null, demo: false }); }
+        if (tokenExpired(storage.get(TOKEN_KEY))) { signOut(); return json({ authenticated: false, role: null, demo: false }); }
         const data = await call("auth/session");
-        currentRole = data.role ?? null;
+        if (!data.authenticated) { signOut(); return json({ authenticated: false, role: null, demo: false }); }
+        currentMe = data.me; currentRole = data.role;
+        saveToken(storage.get(TOKEN_KEY));
         return json(data);
       }
     }
     if (!currentRole) {
       if (tokenExpired(storage.get(TOKEN_KEY))) return unauthorized();
-      currentRole = (await call("auth/session")).role ?? null;
-      if (!currentRole) return unauthorized();
+      const data = await call("auth/session");
+      if (!data.authenticated) return unauthorized();
+      currentMe = data.me; currentRole = data.role;
     }
-    const role: Role = currentRole;
+    const role: Role = currentRole!;
+
+    if (head === "ping") { await call("ping", await readBody()); return json({ ok: true }); }
+    if (head === "admin") {
+      const data = await call(`admin/${id}`, await readBody());
+      return json(data, data.ok === false ? 400 : 200);
+    }
 
     if (head === "fund") {
-      if (id === "session") return json({ authenticated: !tokenExpired(storage.get(FUND_KEY, true)) && (await call("fund/session")).authenticated });
-      if (id === "logout") { storage.set(FUND_KEY, null, true); return json({ authenticated: false }); }
-      if (id === "login") { const data = await call("fund/login", { password: (await readBody()).password ?? "" }); storage.set(FUND_KEY, data.token, true); return json({ authenticated: true }); }
-      if (tokenExpired(storage.get(FUND_KEY, true))) return unauthorized();
+      if (id === "session") return json({ authenticated: Boolean((await call("fund/session")).authenticated) });
+      if (id === "login" || id === "logout") return json({ authenticated: currentMe?.title === "원장" });
       return await fundGet();
     }
 
