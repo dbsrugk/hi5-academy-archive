@@ -1,0 +1,226 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "../vendor/shadcn-tailwind-4.13.0.css";
+
+@font-face {
+  font-family: "Pretendard Variable";
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+  src: url("../fonts/PretendardVariable.woff2") format("woff2-variations");
+}
+
+@utility scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+:root {
+  --background: #ffffff;
+  --foreground: #1e2126;
+  --card: #ffffff;
+  --card-foreground: #1e2126;
+  --popover: #ffffff;
+  --popover-foreground: #1e2126;
+  --primary: #24272d;
+  --primary-foreground: #ffffff;
+  --secondary: #f2eee9;
+  --secondary-foreground: #24272d;
+  --muted: #f1eeea;
+  --muted-foreground: #6e6962;
+  --accent: #fbeaea;
+  --accent-foreground: #b3151c;
+  --destructive: #c4321f;
+  --border: #e6e0d9;
+  --input: #ddd6ce;
+  --ring: #d01a22;
+  --chart-1: #d01a22;
+  --chart-2: #2f6fdb;
+  --chart-3: #1e9468;
+  --chart-4: #e07b16;
+  --chart-5: #7a736b;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #2a2d33;
+  --sidebar-primary: #d01a22;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fbeaea;
+  --sidebar-accent-foreground: #b3151c;
+  --sidebar-border: #e6e0d9;
+  --sidebar-ring: #d01a22;
+  --archive-canvas: #f6f4f1;
+  --archive-panel: #f1eeea;
+  --archive-image-fallback: linear-gradient(145deg, #f1ece5 0%, #f7e4e2 100%);
+  --brand: #d01a22;
+  --brand-soft: #fbeaea;
+  --radius: 0.75rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Pretendard Variable", Pretendard, "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1b1a19;
+    --foreground: #f3f1ee;
+    --card: #232120;
+    --card-foreground: #f3f1ee;
+    --popover: #262423;
+    --popover-foreground: #f3f1ee;
+    --primary: #f3f1ee;
+    --primary-foreground: #1b1a19;
+    --secondary: #33302d;
+    --secondary-foreground: #ece7e1;
+    --muted: #2c2a28;
+    --muted-foreground: #b3aca4;
+    --accent: #3a2222;
+    --accent-foreground: #ff9a9a;
+    --destructive: #ff7b6b;
+    --border: #3a3734;
+    --input: #46423e;
+    --ring: #ff5a5f;
+    --sidebar: #1f1d1c;
+    --sidebar-foreground: #efebe6;
+    --sidebar-primary: #ff5a5f;
+    --sidebar-primary-foreground: #1b1a19;
+    --sidebar-accent: #3a2222;
+    --sidebar-accent-foreground: #ff9a9a;
+    --sidebar-border: #34312e;
+    --sidebar-ring: #ff5a5f;
+    --archive-canvas: #161514;
+    --archive-panel: #2c2a28;
+    --archive-image-fallback: linear-gradient(145deg, #34302c 0%, #3d2a29 100%);
+    --brand: #ff5a5f;
+    --brand-soft: #3a2222;
+  }
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  min-height: 100vh;
+  background: var(--archive-canvas);
+  color: var(--foreground);
+  font-family: "Pretendard Variable", Pretendard, "Noto Sans KR", system-ui, sans-serif;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.marketing-art {
+  position: relative;
+  min-height: 19rem;
+  overflow: hidden;
+  border-radius: 0.875rem;
+  padding: 1.35rem;
+  color: #22283a;
+}
+
+.marketing-art-one {
+  background: radial-gradient(circle at 80% 18%, #f8d588 0 14%, transparent 15%), linear-gradient(145deg, #f3d9d4, #f6efe6);
+}
+
+.marketing-art-two {
+  background: linear-gradient(25deg, transparent 58%, rgb(255 255 255 / 0.5) 59%), linear-gradient(140deg, #c6eee2, #f6e6b9);
+}
+
+.marketing-art-three {
+  background: radial-gradient(circle at 18% 78%, #ffd0bc 0 18%, transparent 19%), linear-gradient(145deg, #ffe4e1, #efe7dc);
+}
+
+.marketing-art-canvas {
+  position: absolute;
+  right: 0.8rem;
+  top: 0.8rem;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.75);
+  padding: 0.3rem 0.5rem;
+  font-size: 0.75rem;
+}
+
+.marketing-art-kicker {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.13em;
+}
+
+.marketing-art strong {
+  display: block;
+  margin-top: 2.1rem;
+  white-space: pre-line;
+  font-size: clamp(1.65rem, 3vw, 2.15rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+}
+
+.marketing-art-caption {
+  position: absolute;
+  bottom: 1.35rem;
+  left: 1.35rem;
+  font-size: 0.875rem;
+}
+
+.marketing-art-card {
+  height: 100%;
+  min-height: 100%;
+}
+
+.marketing-art-preview {
+  min-height: min(30rem, 50vh);
+}
+
+@media (prefers-color-scheme: dark) {
+  .marketing-art { color: #f6f7fb; }
+  .marketing-art-one { background: radial-gradient(circle at 80% 18%, #88703c 0 14%, transparent 15%), linear-gradient(145deg, #5a3533, #4a403a); }
+  .marketing-art-two { background: linear-gradient(25deg, transparent 58%, rgb(22 28 31 / 0.35) 59%), linear-gradient(140deg, #38695d, #6d603a); }
+  .marketing-art-three { background: radial-gradient(circle at 18% 78%, #87513d 0 18%, transparent 19%), linear-gradient(145deg, #6e3a3a, #4b4038); }
+  .marketing-art-canvas { background: rgb(20 23 29 / 0.7); }
+}
