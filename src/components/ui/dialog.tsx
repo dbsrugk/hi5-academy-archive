@@ -6,11 +6,23 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useBackClose } from "@/hooks/use-back-close"
 
 function Dialog({
+  open: openProp,
+  defaultOpen,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+  const [innerOpen, setInnerOpen] = React.useState(defaultOpen ?? false)
+  const controlled = openProp !== undefined
+  const open = controlled ? Boolean(openProp) : innerOpen
+  const setOpen = React.useCallback((value: boolean) => {
+    if (!controlled) setInnerOpen(value)
+    onOpenChange?.(value)
+  }, [controlled, onOpenChange])
+  useBackClose(open, () => setOpen(false))
+  return <DialogPrimitive.Root data-slot="dialog" open={open} onOpenChange={setOpen} {...props} />
 }
 
 function DialogTrigger({

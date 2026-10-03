@@ -5,11 +5,23 @@ import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useBackClose } from "@/hooks/use-back-close"
 
 function AlertDialog({
+  open: openProp,
+  defaultOpen,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+  const [innerOpen, setInnerOpen] = React.useState(defaultOpen ?? false)
+  const controlled = openProp !== undefined
+  const open = controlled ? Boolean(openProp) : innerOpen
+  const setOpen = React.useCallback((value: boolean) => {
+    if (!controlled) setInnerOpen(value)
+    onOpenChange?.(value)
+  }, [controlled, onOpenChange])
+  useBackClose(open, () => setOpen(false))
+  return <AlertDialogPrimitive.Root data-slot="alert-dialog" open={open} onOpenChange={setOpen} {...props} />
 }
 
 function AlertDialogTrigger({

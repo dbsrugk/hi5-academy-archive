@@ -109,14 +109,31 @@ async function login(body: Json, ip: string) {
 }
 
 // ---------- 관리자 ----------
-async function adminList(body: Json) {
+async function adminList() {
   const { data: members, error } = await supabase.from("members").select("id,campus,title,name,status,is_admin,pledge_at,last_seen,created_at").order("created_at", { ascending: false });
   if (error) throw error;
-  let q = supabase.from("access_logs").select("id,member_id,name,action,path,ip,at").order("at", { ascending: false }).limit(Math.min(Number(body.limit) || 500, 1000));
+  return json({ ok: true, members });
+}
+// 접속 기록 검색: 검색어(이름·내용·IP) · 구분 · 캠퍼스 · 사람 · 기간 · 페이지
+async function adminLogs(body: Json) {
+  const limit = Math.min(Math.max(Number(body.limit) || 200, 1), 5000);
+  const offset = Math.max(Number(body.offset) || 0, 0);
+  let q = supabase.from("access_logs").select("id,member_id,name,action,path,ip,at", { count: "exact" }).order("at", { ascending: false }).range(offset, offset + limit - 1);
   if (body.member) q = q.eq("member_id", String(body.member));
-  const { data: logs, error: logError } = await q;
-  if (logError) throw logError;
-  return json({ ok: true, members, logs });
+  if (body.action) q = q.eq("action", String(body.action));
+  if (body.from) q = q.gte("at", String(body.from));
+  if (body.to) q = q.lt("at", String(body.to));
+  if (body.campus && CAMPUSES.includes(String(body.campus))) {
+    const { data: ids } = await supabase.from("members").select("id").eq("campus", String(body.campus));
+    const list = (ids ?? []).map((r) => r.id);
+    if (!list.length) return json({ ok: true, logs: [], total: 0 });
+    q = q.in("member_id", list);
+  }
+  const term = String(body.q ?? "").trim().replace(/[,%()*\\]/g, " ").slice(0, 60);
+  if (term) q = q.or(`name.ilike.%${term}%,path.ilike.%${term}%,ip.ilike.%${term}%`);
+  const { data: logs, error, count } = await q;
+  if (error) throw error;
+  return json({ ok: true, logs, total: count ?? 0 });
 }
 async function adminSet(body: Json, me: Member, ip: string) {
   const id = String(body.id ?? "");
@@ -242,9 +259,10 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    if (path === "admin/list" || path === "admin/set" || path === "admin/delete") {
+    if (path === "admin/list" || path === "admin/logs" || path === "admin/set" || path === "admin/delete") {
       if (!me.is_admin) return json({ ok: false, msg: "관리자만 사용할 수 있어요." }, 403);
-      if (path === "admin/list") return await adminList(body);
+      if (path === "admin/list") return await adminList();
+      if (path === "admin/logs") return await adminLogs(body);
       if (path === "admin/set") return await adminSet(body, me, ip);
       return await adminDelete(body, me, ip);
     }

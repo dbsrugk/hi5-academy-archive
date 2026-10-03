@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { History, RefreshCw, ShieldCheck, UserCheck } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Download, History, RefreshCw, Search, ShieldCheck, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getMe } from "@/archive-api";
@@ -36,19 +37,18 @@ export function MembersSection() {
   const me = getMe();
   const [tab, setTab] = useState<"pending" | "members" | "logs">("pending");
   const [members, setMembers] = useState<Member[]>([]);
-  const [logs, setLogs] = useState<Log[]>([]);
   const [who, setWho] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [confirmDelete, setConfirmDelete] = useState("");
 
-  const load = useCallback(async (member = who) => {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api("list", { limit: 500, member: member || undefined });
-      setMembers(data.members ?? []); setLogs(data.logs ?? []);
+      const data = await api("list");
+      setMembers(data.members ?? []);
     } catch (error) { toast.error(error instanceof Error ? error.message : "불러오지 못했어요."); }
     finally { setLoading(false); }
-  }, [who]);
+  }, []);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -65,7 +65,6 @@ export function MembersSection() {
 
   const pending = members.filter((m) => m.status === "pending");
   const onlineNow = members.filter((m) => m.status === "approved" && online(m.last_seen));
-  const whoMember = who ? members.find((m) => m.id === who) : null;
   const rows = tab === "pending" ? pending : members;
   const counts = useMemo(() => ({ approved: members.filter((m) => m.status === "approved").length, admins: members.filter((m) => m.is_admin).length }), [members]);
 
@@ -112,16 +111,96 @@ export function MembersSection() {
           </Table></div></Card>
         ) : <Empty text={loading ? "불러오는 중…" : tab === "pending" ? "승인 대기 중인 신청이 없어요." : "등록된 회원이 없어요."} />
       ) : (
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">{whoMember ? <><b className="text-foreground">{whoMember.campus} {whoMember.name}</b>님의 기록 · <button className="underline underline-offset-2" onClick={() => setWho("")}>전체 보기</button></> : "최근 기록 500건"}</p>
-          {logs.length ? (
-            <Card className="overflow-hidden rounded-2xl py-0"><div className="overflow-x-auto"><Table>
-              <TableHeader><TableRow className="bg-muted/55"><TableHead>시간</TableHead><TableHead>이름</TableHead><TableHead>구분</TableHead><TableHead>내용</TableHead><TableHead>IP</TableHead></TableRow></TableHeader>
-              <TableBody>{logs.map((l) => <TableRow key={l.id}><TableCell className="whitespace-nowrap text-sm">{fmt(l.at)}</TableCell><TableCell className="whitespace-nowrap">{l.name ?? "—"}</TableCell><TableCell className="whitespace-nowrap"><span className={`text-sm ${l.action === "login_fail" ? "font-medium text-destructive" : ""}`}>{ACTION[l.action] ?? l.action}</span></TableCell><TableCell className="max-w-md truncate text-sm text-muted-foreground">{l.path ?? ""}</TableCell><TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">{l.ip ?? ""}</TableCell></TableRow>)}</TableBody>
-            </Table></div></Card>
-          ) : <Empty text={loading ? "불러오는 중…" : "기록이 없어요."} />}
-        </div>
+        <LogsPanel members={members} who={who} setWho={setWho} />
       )}
+    </div>
+  );
+}
+
+type Period = "today" | "7d" | "30d" | "all" | "custom";
+const dayStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
+function periodRange(period: Period, from: string, to: string) {
+  const today = dayStart(new Date());
+  if (period === "today") return { from: today.toISOString() };
+  if (period === "7d") return { from: new Date(today.getTime() - 6 * 86400000).toISOString() };
+  if (period === "30d") return { from: new Date(today.getTime() - 29 * 86400000).toISOString() };
+  if (period === "custom") return { from: from ? new Date(`${from}T00:00:00`).toISOString() : undefined, to: to ? new Date(new Date(`${to}T00:00:00`).getTime() + 86400000).toISOString() : undefined };
+  return {};
+}
+const csvCell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+
+function LogsPanel({ members, who, setWho }: { members: Member[]; who: string; setWho: (id: string) => void }) {
+  const [input, setInput] = useState("");
+  const [q, setQ] = useState("");
+  const [action, setAction] = useState("");
+  const [campus, setCampus] = useState("");
+  const [period, setPeriod] = useState<Period>("7d");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [logs, setLogs] = useState<Log[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => { const timer = window.setTimeout(() => setQ(input.trim()), 300); return () => window.clearTimeout(timer); }, [input]);
+  const filters = useMemo(() => ({ q: q || undefined, action: action || undefined, campus: campus || undefined, member: who || undefined, ...periodRange(period, from, to) }), [q, action, campus, who, period, from, to]);
+
+  const requestRef = useRef(0);
+  const fetchPage = useCallback(async (offset: number) => {
+    const ticket = ++requestRef.current;
+    setLoading(true);
+    try {
+      const data = await api("logs", { ...filters, limit: 200, offset });
+      if (ticket !== requestRef.current) return;
+      setLogs((current) => offset ? [...current, ...(data.logs ?? [])] : (data.logs ?? []));
+      setTotal(data.total ?? 0);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "기록을 불러오지 못했어요."); }
+    finally { if (ticket === requestRef.current) setLoading(false); }
+  }, [filters]);
+  useEffect(() => { void fetchPage(0); }, [fetchPage]);
+
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const data = await api("logs", { ...filters, limit: 5000, offset: 0 });
+      const byId = new Map(members.map((m) => [m.id, m]));
+      const rows = [["시간", "캠퍼스", "이름", "구분", "내용", "IP"], ...(data.logs as Log[]).map((l) => [new Date(l.at).toLocaleString("ko-KR"), l.member_id ? byId.get(l.member_id)?.campus ?? "" : "", l.name ?? "", ACTION[l.action] ?? l.action, l.path ?? "", l.ip ?? ""])];
+      const blob = new Blob(["\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = `hi5-access-log_${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      toast.success(`${data.logs.length}건을 내려받았어요.`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "내려받지 못했어요."); }
+    finally { setExporting(false); }
+  }
+
+  const campusOf = (l: Log) => l.member_id ? members.find((m) => m.id === l.member_id)?.campus : undefined;
+  const sel = "h-10 rounded-xl border border-input bg-background px-3 text-sm";
+  const periods: Array<[Period, string]> = [["today", "오늘"], ["7d", "7일"], ["30d", "30일"], ["all", "전체"], ["custom", "직접 선택"]];
+
+  return (
+    <div className="space-y-3">
+      <Card className="rounded-2xl py-0"><CardContent className="space-y-3 p-4">
+        <div className="relative"><Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={input} onChange={(event) => setInput(event.target.value)} placeholder="이름, 열람한 자료, IP 검색 (예: 입시설명회)" className="h-10 rounded-xl pl-10" aria-label="접속 기록 검색" /></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select className={sel} value={action} onChange={(event) => setAction(event.target.value)} aria-label="구분"><option value="">전체 구분</option>{Object.entries(ACTION).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select>
+          <select className={sel} value={campus} onChange={(event) => setCampus(event.target.value)} aria-label="캠퍼스"><option value="">전체 캠퍼스</option>{["센텀", "김해", "명지"].map((c) => <option key={c} value={c}>{c}</option>)}</select>
+          <select className={sel} value={who} onChange={(event) => setWho(event.target.value)} aria-label="사람"><option value="">전체 회원</option>{members.map((m) => <option key={m.id} value={m.id}>{m.campus} {m.name}</option>)}</select>
+          <div className="flex flex-wrap gap-1 rounded-xl bg-muted p-1">{periods.map(([key, label]) => <button key={key} type="button" onClick={() => setPeriod(key)} className={`h-8 rounded-lg px-3 text-sm ${period === key ? "bg-background font-semibold shadow-sm" : "text-muted-foreground"}`}>{label}</button>)}</div>
+          {period === "custom" && <div className="flex items-center gap-1.5 text-sm"><input type="date" value={from} onChange={(event) => setFrom(event.target.value)} className={sel} aria-label="시작일" />~<input type="date" value={to} onChange={(event) => setTo(event.target.value)} className={sel} aria-label="종료일" /></div>}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <p className="text-muted-foreground">{loading && !logs.length ? "불러오는 중…" : <>검색 결과 <b className="text-foreground">{total.toLocaleString()}건</b></>}{(q || action || campus || who || period !== "7d") && <button className="ml-3 underline underline-offset-2" onClick={() => { setInput(""); setAction(""); setCampus(""); setWho(""); setPeriod("7d"); }}>필터 초기화</button>}</p>
+          <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void exportCsv()} disabled={exporting || !total}><Download className="size-4" />{exporting ? "준비 중…" : "CSV 내려받기"}</Button>
+        </div>
+      </CardContent></Card>
+      {logs.length ? (
+        <Card className="overflow-hidden rounded-2xl py-0"><div className="overflow-x-auto"><Table>
+          <TableHeader><TableRow className="bg-muted/55"><TableHead>시간</TableHead><TableHead>캠퍼스</TableHead><TableHead>이름</TableHead><TableHead>구분</TableHead><TableHead>내용</TableHead><TableHead>IP</TableHead></TableRow></TableHeader>
+          <TableBody>{logs.map((l) => { const c = campusOf(l); return <TableRow key={l.id}><TableCell className="whitespace-nowrap text-sm">{fmt(l.at)}</TableCell><TableCell className="whitespace-nowrap text-sm">{c ? <span className="inline-flex items-center gap-1.5"><CampusDot branch={c} />{c}</span> : "—"}</TableCell><TableCell className="whitespace-nowrap">{l.member_id ? <button className="hover:underline" onClick={() => setWho(l.member_id!)}>{l.name ?? "—"}</button> : l.name ?? "—"}</TableCell><TableCell className="whitespace-nowrap"><span className={`text-sm ${l.action === "login_fail" ? "font-medium text-destructive" : ""}`}>{ACTION[l.action] ?? l.action}</span></TableCell><TableCell className="max-w-md truncate text-sm text-muted-foreground" title={l.path ?? ""}>{l.path ?? ""}</TableCell><TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">{l.ip ?? ""}</TableCell></TableRow>; })}</TableBody>
+        </Table></div></Card>
+      ) : <Empty text={loading ? "불러오는 중…" : "조건에 맞는 기록이 없어요."} />}
+      {logs.length < total && <div className="flex justify-center"><Button variant="outline" className="rounded-xl" disabled={loading} onClick={() => void fetchPage(logs.length)}>{loading ? "불러오는 중…" : `더 보기 (${(total - logs.length).toLocaleString()}건 남음)`}</Button></div>}
     </div>
   );
 }
