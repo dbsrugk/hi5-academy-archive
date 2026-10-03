@@ -230,6 +230,12 @@ async function dbWrite(op: string, body: Json, role: Role, principal: boolean) {
     next = { ...(existing.data as Json), ...next };
   }
   if (role !== "admin" && collection === "promotions") next.visibility = "draft";
+  if (role !== "admin" && collection === "productionRequests") {
+    // 직원이 올린 요청은 항상 '승인 대기'로 시작 — 진행 상태는 관리자만 바꾼다
+    Object.assign(next, { status: "approval_pending", progressPercent: 0, assignee: "", delayedReason: "", revisedDueDate: "", resultAssetId: null });
+    delete next.approvedAt; delete next.approvedBy; delete next.completedAt;
+    next.history = Array.isArray(next.history) ? next.history.slice(0, 1).map((h: Json) => ({ ...h, status: "approval_pending" })) : [];
+  }
   if (JSON.stringify(next).length > 400_000) return json({ error: "기록이 너무 큽니다." }, 400);
   const { error } = await supabase.from("docs").upsert({ collection, id, data: next, updated_at: now() });
   if (error) throw error;

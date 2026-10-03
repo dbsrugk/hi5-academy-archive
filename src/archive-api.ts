@@ -298,13 +298,23 @@ async function requestsPost(body: Json) {
   await setDoc("productionRequests", id, {
     title, branch, requester, assetType, purpose: str(body.purpose, 2000), specifications: str(body.specifications, 2000), requiredCopy: str(body.requiredCopy),
     requestedDate, desiredDate, driveUrl, notes: str(body.notes), references: imagesOf(body.references, 10), status: "approval_pending", progressPercent: 0,
-    assignee: "", delayedReason: "", revisedDueDate: "", resultAssetId: null, createdAt: at, updatedAt: at,
+    assignee: "", delayedReason: "", revisedDueDate: "", resultAssetId: null, createdBy: whoAmI(), history: [{ status: "approval_pending", at, by: whoAmI(), note: "요청 등록" }], createdAt: at, updatedAt: at,
   });
   return json({ id }, 201);
 }
+function whoAmI() { const me = getMe(); return me ? `${me.campus} ${me.name}` : ""; }
 async function requestsPatch(id: string, body: Json) {
   if (!requestStatuses.includes(body?.status)) return bad("변경 내용을 확인해 주세요.");
-  const patch: Json = { status: body.status, updatedAt: now() };
+  const at = now();
+  const patch: Json = { status: body.status, updatedAt: at };
+  const existing = await getDoc("productionRequests", id);
+  if (!existing) return json({ error: "요청을 찾을 수 없습니다." }, 404);
+  if (existing.status !== body.status) {
+    const history = Array.isArray(existing.history) ? existing.history.slice(-30) : [];
+    patch.history = [...history, { status: body.status, at, by: whoAmI(), note: body.status === "delayed" ? str(body.delayedReason, 200) : "" }];
+    if (body.status === "producing" && !existing.approvedAt) { patch.approvedAt = at; patch.approvedBy = whoAmI(); }
+    if (body.status === "completed") patch.completedAt = at;
+  }
   if (body.assignee !== undefined) patch.assignee = str(body.assignee, 80);
   if (body.progressPercent !== undefined) patch.progressPercent = Math.min(100, int(body.progressPercent));
   if (body.driveUrl !== undefined) patch.driveUrl = str(body.driveUrl, 500);
