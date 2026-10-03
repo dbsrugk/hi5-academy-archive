@@ -1,5 +1,6 @@
 "use client";
 
+import { RichNote, RichLines } from "@/components/archive/rich-note";
 import Image from "next/image";
 import { CampusDot, CampusLabel, campusColor, campusShort } from "@/lib/campus";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -19,7 +20,6 @@ import {
   Hash,
   KeyRound,
   LayoutGrid,
-  ListChecks,
   LoaderCircle,
   LockKeyhole,
   LogOut,
@@ -1643,22 +1643,16 @@ function MeetingDetail({ meeting, onClose }: { meeting: MeetingNote | null; onCl
             <div className="rounded-2xl bg-[var(--archive-panel)] p-4"><MapPin className="size-5 text-primary" /><span className="mt-3 block text-[13px] text-muted-foreground">장소</span><strong className="mt-1 block text-sm">{meeting.location || "미입력"}</strong></div>
           </div>
           {meeting.purpose && <DetailSection title="회의 목적"><p className="whitespace-pre-wrap">{meeting.purpose}</p></DetailSection>}
-          <DetailSection title="핵심 요약"><p className="whitespace-pre-wrap">{meeting.summary || "입력된 요약이 없습니다."}</p></DetailSection>
+          <DetailSection title="핵심 요약"><p className="whitespace-pre-wrap rounded-2xl border border-primary/15 bg-[var(--archive-panel)] p-4 text-foreground">{meeting.summary || "입력된 요약이 없습니다."}</p></DetailSection>
           {meeting.participants && <DetailSection title="참석자"><p className="whitespace-pre-wrap">{meeting.participants}</p></DetailSection>}
-          {meeting.discussion && <DetailSection title="논의 내용"><p className="whitespace-pre-wrap">{meeting.discussion}</p></DetailSection>}
-          {meeting.decisions && <DetailSection title="결정 사항"><MeetingLines value={meeting.decisions} /></DetailSection>}
-          {meeting.actionItems && <DetailSection title="후속 업무"><MeetingLines value={meeting.actionItems} /></DetailSection>}
+          {meeting.discussion && <DetailSection title="논의 내용"><RichNote value={meeting.discussion} /></DetailSection>}
+          {meeting.decisions && <DetailSection title="결정 사항"><RichLines value={meeting.decisions} done /></DetailSection>}
+          {meeting.actionItems && <DetailSection title="후속 업무"><RichLines value={meeting.actionItems} /></DetailSection>}
           {meeting.source && <DetailSection title="원본 정보"><p className="whitespace-pre-wrap">{meeting.source}</p></DetailSection>}
         </>}
       </DialogContent>
     </Dialog>
   );
-}
-
-function MeetingLines({ value }: { value: string }) {
-  const lines = splitLines(value);
-  if (lines.length <= 1) return <p className="whitespace-pre-wrap">{value}</p>;
-  return <ul className="space-y-2">{lines.map((line, index) => <li key={line + "-" + index} className="flex gap-2"><ListChecks className="mt-1 size-4 shrink-0 text-primary" /><span>{line}</span></li>)}</ul>;
 }
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -1787,8 +1781,8 @@ function MeetingForm({ saving, setSaving, onSaved }: { saving: boolean; setSavin
       <TagEditor name="tags" suggestions={["운영회의", "커리큘럼", "공모전", "실기연구", "공동품평", "재등록관리", "시스템개발", "공동제작실", "디자인실기", "애니", "초중등"]} />
       <TextField label="회의 목적" name="purpose" />
       <TextField label="핵심 요약" name="summary" placeholder="회의 결과를 짧게 정리해 주세요." />
-      <TextField label="논의 내용" name="discussion" rows={6} />
-      <TextField label="결정 사항" name="decisions" placeholder="한 줄에 하나씩 입력해 주세요." rows={5} />
+      <TextField label="논의 내용" name="discussion" rows={8} placeholder={"■ 1. 파트 제목\n[소제목]\n• 항목 — 앞의 '라벨:'은 자동 굵게\n• 이사님 의견: … (강조 박스)\n**굵게** · → 화살표"} />
+      <TextField label="결정 사항" name="decisions" placeholder="한 줄에 하나씩 · 앞에 [디자인] 같은 말머리를 쓰면 색 태그로 보여요." rows={5} />
       <TextField label="후속 업무" name="actionItems" placeholder="업무 | 담당자 | 기한 순서로 한 줄에 하나씩 입력해 주세요." rows={5} />
       <DialogFooter className="gap-2">
         <Button type="submit" name="status" value="draft" variant="outline" disabled={saving}>초안 저장</Button>
