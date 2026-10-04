@@ -77,6 +77,17 @@ function dbError(error: any) {
   return json({ error: "서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요." }, 500);
 }
 
+// ---------- 알림 ----------
+export type NotificationItem = { id: string; kind: string; title: string; body: string | null; link: string | null; created_at: string; read_at: string | null };
+export type NotificationState = { items: NotificationItem[]; unread: number; badges: { requests?: number; members?: number }; devices: number; vapidKey: string | null };
+export const notifyApi = {
+  list: () => call("notify/list") as Promise<NotificationState>,
+  read: (ids: string[] | "all") => call("notify/read", ids === "all" ? { all: true } : { ids }),
+  subscribe: (subscription: PushSubscriptionJSON) => call("push/subscribe", { subscription, ua: navigator.userAgent }),
+  unsubscribe: (endpoint: string) => call("push/unsubscribe", { endpoint }),
+  test: () => call("push/test"),
+};
+
 // ---------- DB 헬퍼 ----------
 async function all(collection: string): Promise<Json[]> { return (await call("db/list", { collection })).docs ?? []; }
 async function getDoc(collection: string, id: string): Promise<Json | null> { return (await call("db/get", { collection, id })).doc ?? null; }
@@ -85,15 +96,17 @@ async function updateDoc(collection: string, id: string, data: Json) { await cal
 async function deleteDoc(collection: string, id: string) { await call("db/delete", { collection, id }); }
 
 // ---------- 파일 ----------
+const isStatic = (key: string) => key.startsWith("./") || key.startsWith("/");
 export function fileUrl(key: string | null | undefined, download = false) {
   if (!key) return null;
+  if (isStatic(key)) return key; // 사이트에 함께 올라간 기존 자료 사진 (로그인 쿠키로 보호)
   const hit = fileCache.get(key);
   if (!hit) return null;
   return download && hit.url.startsWith("http") ? `${hit.url}&download=` : hit.url;
 }
 async function ensureBlobs(keys: Array<string | null | undefined>) {
   const fresh = Date.now() - 3 * 60 * 60 * 1000;
-  const missing = [...new Set(keys.filter((k): k is string => !!k && !((fileCache.get(k)?.at ?? 0) > fresh)))];
+  const missing = [...new Set(keys.filter((k): k is string => !!k && !isStatic(k) && !((fileCache.get(k)?.at ?? 0) > fresh)))];
   if (!missing.length) return;
   const { urls } = await call("files/sign-read", { keys: missing });
   for (const [key, url] of Object.entries(urls ?? {})) fileCache.set(key, { url: String(url), at: Date.now() });

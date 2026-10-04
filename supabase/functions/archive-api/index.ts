@@ -1,6 +1,7 @@
 // 학원 아카이브 서버 함수 (Supabase Edge Function)
 // 역할: 교직원 가입 신청·승인·로그인, 컬렉션별 권한 확인, 파일 서명, 접속 기록, 관리자 회원 관리
 import { createClient } from "npm:@supabase/supabase-js@2";
+import webpush from "npm:web-push@3.6.7";
 
 type Role = "staff" | "admin";
 type Json = Record<string, any>;
@@ -14,7 +15,7 @@ const SESSION_DAYS = 14;
 const cors = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,OPTIONS",
-  "access-control-allow-headers": "authorization, apikey, content-type, x-client-info, x-archive-token",
+  "access-control-allow-headers": "authorization, apikey, content-type, x-client-info, x-archive-token, x-cron-secret",
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "content-type": "application/json" } });
 const now = () => new Date().toISOString();
@@ -74,6 +75,93 @@ async function log(member: { id?: string; name?: string } | null, action: string
   await supabase.from("access_logs").insert({ member_id: member?.id ?? null, name: member?.name ?? null, action, path: path?.slice(0, 200) ?? null, ip });
 }
 
+// ---------- 알림 (알림함 + 휴대폰 웹 푸시) ----------
+type Note = { kind: string; title: string; body?: string; link?: string; ref?: string };
+let vapidReady = false;
+async function setupVapid() {
+  if (vapidReady) return true;
+  const c = await config();
+  if (!c.vapid_public || !c.vapid_private) return false;
+  webpush.setVapidDetails(c.vapid_subject || "https://hi5-academy-archive.vercel.app", c.vapid_public, c.vapid_private);
+  vapidReady = true;
+  return true;
+}
+function background(p: Promise<unknown>) {
+  const rt = (globalThis as any).EdgeRuntime;
+  const safe = p.catch((e) => console.error("[notify]", e));
+  if (rt?.waitUntil) rt.waitUntil(safe); else return safe;
+}
+async function adminIds(except?: string) {
+  const { data } = await supabase.from("members").select("id").eq("is_admin", true).eq("status", "approved");
+  return (data ?? []).map((r) => r.id).filter((id) => id !== except);
+}
+async function sendPush(memberIds: string[], n: Note) {
+  if (!memberIds.length || !(await setupVapid())) return;
+  const { data: subs } = await supabase.from("push_subscriptions").select("id,endpoint,p256dh,auth").in("member_id", memberIds);
+  const payload = JSON.stringify({ title: n.title, body: n.body ?? "", link: n.link ?? "/", tag: n.ref ?? n.kind });
+  await Promise.allSettled((subs ?? []).map(async (s) => {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 86400, urgency: "high" });
+      await supabase.from("push_subscriptions").update({ last_ok_at: now() }).eq("id", s.id);
+    } catch (e) {
+      const code = (e as any)?.statusCode;
+      if (code === 404 || code === 410) await supabase.from("push_subscriptions").delete().eq("id", s.id);
+      else console.error("[push]", code, (e as any)?.body ?? e);
+    }
+  }));
+}
+// 알림함에 기록하고 휴대폰으로도 보낸다. ref가 같으면 한 번만.
+async function notify(memberIds: string[], n: Note) {
+  const ids = [...new Set(memberIds.filter(Boolean))];
+  if (!ids.length) return;
+  const sent: string[] = [];
+  for (const member_id of ids) {
+    const { error } = await supabase.from("notifications").insert({ member_id, kind: n.kind, title: n.title.slice(0, 120), body: (n.body ?? "").slice(0, 400), link: n.link ?? null, ref: n.ref ?? null });
+    if (!error) sent.push(member_id);
+    else if (error.code !== "23505") console.error("[notify]", error);
+  }
+  await sendPush(sent, n);
+}
+const shortCampus = (b: string) => String(b ?? "").replace("캠퍼스", "");
+const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
+const addDays = (d: string, n: number) => new Date(new Date(d + "T00:00:00Z").getTime() + n * 86400_000).toISOString().slice(0, 10);
+const REQUEST_NOTES: Record<string, (r: Json) => Note> = {
+  producing: (r) => ({ kind: "request", title: "✅ 제작 요청이 승인됐어요", body: `'${r.title}' 제작을 시작했어요${r.assignee ? ` · 담당 ${r.assignee}` : ""}`, link: "#requests" }),
+  reviewing: (r) => ({ kind: "request", title: "👀 시안이 나왔어요", body: `'${r.title}' 시안을 확인해 주세요`, link: "#requests" }),
+  delayed: (r) => ({ kind: "request", title: "⏰ 제작이 지연되고 있어요", body: `'${r.title}' · ${r.delayedReason || "사유 미입력"}${r.revisedDueDate ? ` · 변경 완료일 ${r.revisedDueDate}` : ""}`, link: "#requests" }),
+  completed: (r) => ({ kind: "request", title: "🎉 제작이 완료됐어요", body: `'${r.title}'${r.driveUrl ? " · Drive에서 확인하세요" : ""}`, link: "#requests" }),
+};
+// 매일 오전 9시: 마감 임박인데 승인 대기 / 마감 지난 진행 중 요청
+async function dailyCheck() {
+  const { data } = await supabase.from("docs").select("id,data").eq("collection", "productionRequests");
+  const today = kstToday(), soon = addDays(today, 2);
+  const admins = await adminIds();
+  let count = 0;
+  for (const row of data ?? []) {
+    const r = row.data as Json;
+    const due = r.revisedDueDate || r.desiredDate;
+    if (!due || r.status === "completed") continue;
+    if (r.status === "approval_pending" && due <= soon) {
+      await notify(admins, { kind: "deadline", title: "⏰ 마감이 가까운데 아직 승인 대기예요", body: `${shortCampus(r.branch)} · '${r.title}' · 마감 ${due}`, link: "#requests", ref: `pending-${row.id}-${today}` }); count++;
+    } else if (r.status !== "approval_pending" && due < today) {
+      await notify([...admins, r.createdById].filter(Boolean), { kind: "deadline", title: "🚨 마감일이 지났어요", body: `${shortCampus(r.branch)} · '${r.title}' · 마감 ${due} · ${r.assignee || "담당 미정"}`, link: "#requests", ref: `late-${row.id}-${today}` }); count++;
+    }
+  }
+  return count;
+}
+async function notifyList(me: Member) {
+  const { data: items } = await supabase.from("notifications").select("id,kind,title,body,link,created_at,read_at").eq("member_id", me.id).order("created_at", { ascending: false }).limit(40);
+  const { count: unread } = await supabase.from("notifications").select("id", { count: "exact", head: true }).eq("member_id", me.id).is("read_at", null);
+  const badges: Json = {};
+  if (me.is_admin) {
+    const { count: requests } = await supabase.from("docs").select("id", { count: "exact", head: true }).eq("collection", "productionRequests").eq("data->>status", "approval_pending");
+    const { count: members } = await supabase.from("members").select("id", { count: "exact", head: true }).eq("status", "pending");
+    badges.requests = requests ?? 0; badges.members = members ?? 0;
+  }
+  const { count: devices } = await supabase.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("member_id", me.id);
+  return json({ items: items ?? [], unread: unread ?? 0, badges, devices: devices ?? 0, vapidKey: (await config()).vapid_public ?? null });
+}
+
 // ---------- 가입·로그인 ----------
 async function apply(body: Json, ip: string) {
   const campus = String(body.campus ?? ""), title = String(body.title ?? ""), name = String(body.name ?? "").trim().slice(0, 20), pin = String(body.pin ?? "");
@@ -86,6 +174,7 @@ async function apply(body: Json, ip: string) {
   const { data, error } = await supabase.from("members").insert({ campus, title, name, pin_salt: salt, pin_hash: await pinHash(pin, salt), pledge_at: now() }).select("id").single();
   if (error) throw error;
   await log({ id: data.id, name }, "apply", `${campus} ${title}`, ip);
+  background(adminIds().then((ids) => notify(ids, { kind: "member", title: "🙋 새 가입 신청이 있어요", body: `${campus} ${title} ${name} · 회원 관리에서 승인해 주세요`, link: "#admin", ref: `apply-${data.id}` })));
   return json({ ok: true });
 }
 async function login(body: Json, ip: string) {
@@ -209,7 +298,7 @@ async function dbGet(collection: string, id: string, role: Role, principal: bool
   const doc = data ? { ...(data.data as Json), id: data.id } : null;
   return json({ doc: doc && !hideDraft(collection, role, doc) ? doc : null });
 }
-async function dbWrite(op: string, body: Json, role: Role, principal: boolean) {
+async function dbWrite(op: string, body: Json, role: Role, principal: boolean, me: Member) {
   const collection = String(body.collection ?? ""), id = String(body.id ?? "");
   if (!COLLECTIONS.has(collection) || !/^[A-Za-z0-9_.:-]{1,120}$/.test(id)) return json({ error: "잘못된 요청입니다." }, 400);
   if (collection === "fund" && !principal) return json({ error: "제작실 기금은 원장만 관리할 수 있습니다." }, 403);
@@ -236,9 +325,19 @@ async function dbWrite(op: string, body: Json, role: Role, principal: boolean) {
     delete next.approvedAt; delete next.approvedBy; delete next.completedAt;
     next.history = Array.isArray(next.history) ? next.history.slice(0, 1).map((h: Json) => ({ ...h, status: "approval_pending" })) : [];
   }
+  if (collection === "productionRequests" && !existing) next.createdById = me.id;
+  if (collection === "productionRequests" && existing) next.createdById = (existing.data as Json).createdById ?? null;
   if (JSON.stringify(next).length > 400_000) return json({ error: "기록이 너무 큽니다." }, 400);
   const { error } = await supabase.from("docs").upsert({ collection, id, data: next, updated_at: now() });
   if (error) throw error;
+  if (collection === "productionRequests") {
+    const prev = existing?.data as Json | undefined;
+    if (!prev) {
+      background(adminIds(me.id).then((ids) => notify(ids, { kind: "request", title: "📮 새 제작 요청이 들어왔어요", body: `${shortCampus(next.branch)} · ${next.requester || me.name} · '${next.title}'${next.desiredDate ? ` · 마감 ${next.desiredDate}` : ""}`, link: "#requests", ref: `new-${id}` })));
+    } else if (prev.status !== next.status && REQUEST_NOTES[next.status] && next.createdById && next.createdById !== me.id) {
+      background(notify([next.createdById], { ...REQUEST_NOTES[next.status](next), ref: `st-${id}-${next.status}-${Date.now()}` }));
+    }
+  }
   return json({ ok: true });
 }
 
@@ -252,6 +351,11 @@ Deno.serve(async (req) => {
   try {
     if (path === "auth/apply") return await apply(body, ip);
     if (path === "auth/login") return await login(body, ip);
+    if (path === "cron/daily") {
+      const secret = (await config()).cron_secret;
+      if (!secret || req.headers.get("x-cron-secret") !== secret) return json({ error: "forbidden" }, 403);
+      return json({ ok: true, sent: await dailyCheck() });
+    }
 
     const me = await currentMember(req.headers.get("x-archive-token"));
     if (path === "auth/session") return json(me ? { authenticated: true, role: me.is_admin ? "admin" : "staff", demo: false, me: meOf(me) } : { authenticated: false, role: null, demo: false, logout: true });
@@ -281,7 +385,31 @@ Deno.serve(async (req) => {
 
     if (path === "db/list") return COLLECTIONS.has(body.collection) ? await dbList(body.collection, role, principal) : json({ docs: [] });
     if (path === "db/get") return COLLECTIONS.has(body.collection) ? await dbGet(body.collection, String(body.id ?? ""), role, principal) : json({ doc: null });
-    if (path === "db/set" || path === "db/update" || path === "db/delete") return await dbWrite(path.slice(3), body, role, principal);
+    if (path === "db/set" || path === "db/update" || path === "db/delete") return await dbWrite(path.slice(3), body, role, principal, me);
+
+    // 알림
+    if (path === "notify/list") return await notifyList(me);
+    if (path === "notify/read") {
+      let q = supabase.from("notifications").update({ read_at: now() }).eq("member_id", me.id).is("read_at", null);
+      if (!body.all) q = q.in("id", (Array.isArray(body.ids) ? body.ids : []).map(String).slice(0, 100));
+      await q;
+      return json({ ok: true });
+    }
+    if (path === "push/subscribe") {
+      const sub = body.subscription ?? {};
+      if (!/^https:\/\//.test(String(sub.endpoint ?? "")) || !sub.keys?.p256dh || !sub.keys?.auth) return json({ error: "알림 등록 정보를 확인해 주세요." }, 400);
+      const { error } = await supabase.from("push_subscriptions").upsert({ member_id: me.id, endpoint: String(sub.endpoint), p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth), ua: String(body.ua ?? "").slice(0, 200) }, { onConflict: "endpoint" });
+      if (error) throw error;
+      return json({ ok: true });
+    }
+    if (path === "push/unsubscribe") {
+      await supabase.from("push_subscriptions").delete().eq("member_id", me.id).eq("endpoint", String(body.endpoint ?? ""));
+      return json({ ok: true });
+    }
+    if (path === "push/test") {
+      await notify([me.id], { kind: "test", title: "🔔 알림이 잘 와요!", body: "앞으로 제작 요청·승인 소식을 이렇게 알려드릴게요.", link: "#requests" });
+      return json({ ok: true });
+    }
   } catch (error) {
     console.error("[archive-api]", error);
     return json({ error: "요청을 처리하지 못했습니다." }, 500);

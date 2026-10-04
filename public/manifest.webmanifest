@@ -1,0 +1,16 @@
+{
+  "name": "하이파이브 학원 아카이브",
+  "short_name": "Hi5 아카이브",
+  "description": "하이파이브미술학원 행정·마케팅 아카이브 (교직원 전용)",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#24272d",
+  "lang": "ko",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

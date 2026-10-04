@@ -61,7 +61,7 @@ function mergeById<T extends { id: string }>(server: T[], demo: T[]) {
 
 export function ComplianceSection({ role, demoMode }: { role: Role; demoMode: boolean }) {
   const [requirements, setRequirements] = useState(demoRequirements);
-  const [submissions, setSubmissions] = useState(demoSubmissions);
+  const [submissions, setSubmissions] = useState<Submission[]>(demoMode ? demoSubmissions : []);
   const [trashed, setTrashed] = useState<Submission[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Submission | null>(null);
@@ -72,9 +72,9 @@ export function ComplianceSection({ role, demoMode }: { role: Role; demoMode: bo
   useEffect(() => {
     fetch("/api/compliance", { cache: "no-store" })
       .then(async (response): Promise<{ requirements?: Requirement[]; submissions?: Submission[]; trashed?: Submission[]; logs?: ActivityLog[] }> => response.ok ? response.json() as Promise<{ requirements?: Requirement[]; submissions?: Submission[]; trashed?: Submission[]; logs?: ActivityLog[] }> : {})
-      .then((data) => { setRequirements(mergeById(data.requirements ?? [], demoRequirements).filter((item) => !retiredRequirementTitles.has(item.title))); setSubmissions(mergeById(data.submissions ?? [], demoSubmissions)); setTrashed(data.trashed ?? []); setLogs(data.logs ?? []); })
+      .then((data) => { setRequirements(mergeById(data.requirements ?? [], demoRequirements).filter((item) => !retiredRequirementTitles.has(item.title))); setSubmissions(demoMode ? mergeById(data.submissions ?? [], demoSubmissions) : data.submissions ?? []); setTrashed(data.trashed ?? []); setLogs(data.logs ?? []); })
       .catch(() => undefined);
-  }, []);
+  }, [demoMode]);
 
   const visibleSubmissions = campus === "all" ? submissions : submissions.filter((item) => item.branch === campus);
   const completedKeys = new Set(visibleSubmissions.filter(isSubmissionComplete).map((item) => `${item.requirementId}:${item.branch}`));

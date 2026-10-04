@@ -1,6 +1,7 @@
 "use client";
 
 import { RichNote, RichLines } from "@/components/archive/rich-note";
+import { NotificationCenter } from "@/components/archive/notification-center";
 import Image from "next/image";
 import { CampusDot, CampusLabel, campusColor, campusShort } from "@/lib/campus";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -74,6 +75,7 @@ import {
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
+  SidebarMenuBadge,
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
@@ -1011,9 +1013,9 @@ export default function Home() {
   const [budget, setBudget] = useState("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [popularTags, setPopularTags] = useState<TagStat[]>([]);
-  const [events, setEvents] = useState<EventRecord[]>(demoEvents);
-  const [assets, setAssets] = useState<MarketingAsset[]>(demoAssets);
-  const [meetings, setMeetings] = useState<MeetingNote[]>(demoMeetings);
+  const [events, setEvents] = useState<EventRecord[]>([]);
+  const [assets, setAssets] = useState<MarketingAsset[]>([]);
+  const [meetings, setMeetings] = useState<MeetingNote[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<EventRecord | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<MarketingAsset | null>(null);
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingNote | null>(null);
@@ -1021,6 +1023,7 @@ export default function Home() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
+  const [navBadges, setNavBadges] = useState<{ requests?: number; members?: number }>({});
 
   useEffect(() => {
     fetch("/api/auth/session", { cache: "no-store" })
@@ -1059,12 +1062,14 @@ export default function Home() {
         }
         if (!response.ok) throw new Error("archive unavailable");
         const data = await response.json() as { events?: EventRecord[]; assets?: MarketingAsset[]; meetings?: MeetingNote[] };
-        if (section === "events") setEvents([...(data.events ?? []), ...filterDemoEvents(query, branch, target, budget, selectedTags)]);
-        else if (section === "marketing") setAssets([...(data.assets ?? []), ...filterDemoAssets(query, branch, target)]);
-        else setMeetings([...(data.meetings ?? []), ...filterDemoMeetings(query, selectedTags)]);
+        // 체험판에서만 예시 자료를 섞는다 (실제 자료는 모두 서버에 있음)
+        if (section === "events") setEvents([...(data.events ?? []), ...(demoMode ? filterDemoEvents(query, branch, target, budget, selectedTags) : [])]);
+        else if (section === "marketing") setAssets([...(data.assets ?? []), ...(demoMode ? filterDemoAssets(query, branch, target) : [])]);
+        else setMeetings([...(data.meetings ?? []), ...(demoMode ? filterDemoMeetings(query, selectedTags) : [])]);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
-          if (section === "events") setEvents(filterDemoEvents(query, branch, target, budget, selectedTags));
+          if (!demoMode) toast.error("자료를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+          else if (section === "events") setEvents(filterDemoEvents(query, branch, target, budget, selectedTags));
           else if (section === "marketing") setAssets(filterDemoAssets(query, branch, target));
           else setMeetings(filterDemoMeetings(query, selectedTags));
         }
@@ -1076,14 +1081,14 @@ export default function Home() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [branch, budget, query, reloadToken, role, section, selectedTags, target]);
+  }, [branch, budget, demoMode, query, reloadToken, role, section, selectedTags, target]);
 
   useEffect(() => {
     if (!role || (section !== "events" && section !== "meetings")) {
       setPopularTags([]);
       return;
     }
-    const demo = tagStats(section === "events" ? demoEvents : demoMeetings);
+    const demo = demoMode ? tagStats(section === "events" ? demoEvents : demoMeetings) : [];
     fetch(`/api/tags?scope=${section}`, { cache: "no-store" })
       .then(async (response) => response.ok ? response.json() as Promise<{ tags?: TagStat[] }> : { tags: [] })
       .then((data) => {
@@ -1095,7 +1100,7 @@ export default function Home() {
         setPopularTags([...merged.values()].sort((a, b) => b.count - a.count || (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") || a.name.localeCompare(b.name, "ko")));
       })
       .catch(() => setPopularTags(demo));
-  }, [reloadToken, role, section]);
+  }, [demoMode, reloadToken, role, section]);
 
   useEffect(() => {
     if (!role || !document.modelContext?.registerTool) return;
@@ -1277,6 +1282,7 @@ export default function Home() {
                   <SidebarMenuButton isActive={section === "requests"} tooltip="제작 요청" onClick={() => changeSection("requests")}>
                     <ClipboardList aria-hidden="true" /><span>제작 요청</span>
                   </SidebarMenuButton>
+                  {role === "admin" && !!navBadges.requests && <SidebarMenuBadge className="rounded-full bg-amber-500 px-1.5 text-white peer-hover/menu-button:text-white peer-data-[active=true]/menu-button:text-white">{navBadges.requests}</SidebarMenuBadge>}
                 </SidebarMenuItem>
                 <SidebarMenuItem>
                   <SidebarMenuButton isActive={section === "marketing"} tooltip="마케팅 제작물" onClick={() => changeSection("marketing")}>
@@ -1317,6 +1323,7 @@ export default function Home() {
                     <SidebarMenuButton isActive={section === "members"} tooltip="회원 관리" onClick={() => changeSection("members")}>
                       <UserCog aria-hidden="true" /><span>회원 관리</span>
                     </SidebarMenuButton>
+                    {!!navBadges.members && <SidebarMenuBadge className="rounded-full bg-amber-500 px-1.5 text-white peer-hover/menu-button:text-white peer-data-[active=true]/menu-button:text-white">{navBadges.members}</SidebarMenuBadge>}
                   </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -1342,10 +1349,11 @@ export default function Home() {
       <SidebarInset className="min-w-0 bg-[var(--archive-canvas)]">
         {me && <Watermark text={`${me.campus} ${me.name} · ${new Date().toISOString().slice(0, 10)}`} />}
         <header className="sticky top-0 z-20 flex h-12 items-center justify-between border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl md:px-7">
-          <div className="flex items-center gap-2 text-sm"><SidebarTrigger className="size-8 md:hidden" />{navDepth > 0 && <Button type="button" variant="ghost" size="sm" className="-ml-1 h-8 gap-1 rounded-lg px-2 text-muted-foreground hover:text-foreground" onClick={() => history.back()} aria-label="이전 화면으로"><ArrowLeft className="size-4" /><span className="hidden sm:inline">뒤로</span></Button>}<span className="hidden text-muted-foreground sm:inline">아카이브</span><span className="hidden text-muted-foreground/50 sm:inline">/</span><h2 className="font-medium">{sectionLabel}</h2></div>
+          <div className="flex items-center gap-2 text-sm"><span className="relative md:hidden"><SidebarTrigger className="size-8" />{role === "admin" && ((navBadges.requests ?? 0) + (navBadges.members ?? 0)) > 0 && <span className="pointer-events-none absolute top-0.5 right-0.5 size-2 rounded-full bg-amber-500" aria-label="처리할 일 있음" />}</span>{navDepth > 0 && <Button type="button" variant="ghost" size="sm" className="-ml-1 h-8 gap-1 rounded-lg px-2 text-muted-foreground hover:text-foreground" onClick={() => history.back()} aria-label="이전 화면으로"><ArrowLeft className="size-4" /><span className="hidden sm:inline">뒤로</span></Button>}<span className="hidden text-muted-foreground sm:inline">아카이브</span><span className="hidden text-muted-foreground/50 sm:inline">/</span><h2 className="font-medium">{sectionLabel}</h2></div>
           <div className="flex items-center gap-2">
             {(role === "admin" || (demoMode && section === "marketing")) && (section === "events" || section === "marketing" || section === "meetings") && <Button size="sm" className="rounded-xl" onClick={() => setEditorOpen(true)}><Plus className="size-4" />새 자료 등록</Button>}
             <Badge variant="secondary" className="hidden gap-1.5 rounded-full px-3 py-1.5 font-medium text-emerald-700 sm:inline-flex dark:text-emerald-300"><Archive className="size-3.5" />{demoMode ? "체험판" : "직원 전용"}</Badge>
+            {!demoMode && <NotificationCenter onBadges={setNavBadges} onNavigate={(link) => { const next = hashToSection(link); if (next) changeSection(next); }} />}
           </div>
         </header>
 
