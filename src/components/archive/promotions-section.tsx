@@ -156,7 +156,7 @@ async function readPromotionWorkbook(file: File): Promise<ImportRow[]> {
 }
 
 export function PromotionsSection({ role, demoMode }: { role: Role; demoMode: boolean }) {
-  const [campaigns, setCampaigns] = useState(demoPromotions);
+  const [campaigns, setCampaigns] = useState<PromotionCampaign[]>(demoMode ? demoPromotions : []);
   const [mode, setMode] = useState<"records" | "analytics">("records");
   const [query, setQuery] = useState("");
   const [channel, setChannel] = useState("all");
@@ -177,8 +177,8 @@ export function PromotionsSection({ role, demoMode }: { role: Role; demoMode: bo
 
   useEffect(() => {
     fetch("/api/promotions", { cache: "no-store" }).then(async (response) => response.ok ? response.json() as Promise<{ campaigns?: PromotionCampaign[] }> : { campaigns: [] })
-      .then((data) => setCampaigns([...(data.campaigns ?? []), ...demoPromotions])).catch(() => setCampaigns(demoPromotions));
-  }, []);
+      .then((data) => setCampaigns([...(data.campaigns ?? []), ...(demoMode ? demoPromotions : [])])).catch(() => setCampaigns(demoMode ? demoPromotions : []));
+  }, [demoMode]);
 
   const filtered = useMemo(() => campaigns.filter((item) => {
     const haystack = `${item.title} ${item.branch} ${item.manager} ${item.locations.map((location) => location.school).join(" ")}`.toLowerCase();
