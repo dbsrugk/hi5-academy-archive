@@ -61,7 +61,7 @@ function mergeById<T extends { id: string }>(server: T[], demo: T[]) {
 
 export function ComplianceSection({ role, demoMode }: { role: Role; demoMode: boolean }) {
   const [requirements, setRequirements] = useState(demoRequirements);
-  const [submissions, setSubmissions] = useState<Submission[]>(demoMode ? demoSubmissions : []);
+  const [submissions, setSubmissions] = useState(demoSubmissions);
   const [trashed, setTrashed] = useState<Submission[]>([]);
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Submission | null>(null);
@@ -72,9 +72,9 @@ export function ComplianceSection({ role, demoMode }: { role: Role; demoMode: bo
   useEffect(() => {
     fetch("/api/compliance", { cache: "no-store" })
       .then(async (response): Promise<{ requirements?: Requirement[]; submissions?: Submission[]; trashed?: Submission[]; logs?: ActivityLog[] }> => response.ok ? response.json() as Promise<{ requirements?: Requirement[]; submissions?: Submission[]; trashed?: Submission[]; logs?: ActivityLog[] }> : {})
-      .then((data) => { setRequirements(mergeById(data.requirements ?? [], demoRequirements).filter((item) => !retiredRequirementTitles.has(item.title))); setSubmissions(demoMode ? mergeById(data.submissions ?? [], demoSubmissions) : data.submissions ?? []); setTrashed(data.trashed ?? []); setLogs(data.logs ?? []); })
+      .then((data) => { setRequirements(mergeById(data.requirements ?? [], demoRequirements).filter((item) => !retiredRequirementTitles.has(item.title))); setSubmissions(mergeById(data.submissions ?? [], demoSubmissions)); setTrashed(data.trashed ?? []); setLogs(data.logs ?? []); })
       .catch(() => undefined);
-  }, [demoMode]);
+  }, []);
 
   const visibleSubmissions = campus === "all" ? submissions : submissions.filter((item) => item.branch === campus);
   const completedKeys = new Set(visibleSubmissions.filter(isSubmissionComplete).map((item) => `${item.requirementId}:${item.branch}`));
@@ -124,7 +124,7 @@ export function ComplianceSection({ role, demoMode }: { role: Role; demoMode: bo
     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950"><AlertTriangle className="mr-2 inline size-4" />교육 대상과 의무 여부는 캠퍼스 소재지, 인원 및 담당 업무에 따라 달라질 수 있습니다. 등록된 링크에서 최신 공식 공지를 확인한 뒤 이수해 주세요.</div>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Summary label="전체 완료율" value={`${completionRate}%`} icon={CheckCircle2} tone="green" /><Summary label="미완료" value={`${incompleteCount}건`} icon={CircleDashed} tone="blue" /><Summary label="60일 내 마감" value={`${dueSoon}건`} icon={AlertTriangle} tone="amber" /><Summary label="올해 관리 항목" value={`${requirements.length}개`} icon={CalendarClock} tone="indigo" /></div>
     <NoticeBoard requirements={notices} />
-    <Tabs defaultValue="dashboard"><TabsList><TabsTrigger value="dashboard">연간 현황</TabsTrigger><TabsTrigger value="requirements">이수 항목</TabsTrigger><TabsTrigger value="forms">집합교육 양식</TabsTrigger><TabsTrigger value="submissions">이수증 기록</TabsTrigger>{canManage && <TabsTrigger value="admin">관리자</TabsTrigger>}</TabsList>
+    <Tabs defaultValue="dashboard"><div className="-mx-1 overflow-x-auto px-1 pb-1"><TabsList className="w-max"><TabsTrigger value="dashboard">연간 현황</TabsTrigger><TabsTrigger value="requirements">이수 항목</TabsTrigger><TabsTrigger value="forms">집합교육 양식</TabsTrigger><TabsTrigger value="submissions">이수증 기록</TabsTrigger>{canManage && <TabsTrigger value="admin">관리자</TabsTrigger>}</TabsList></div>
       <TabsContent value="dashboard" className="mt-4"><Dashboard requirements={requirements} submissions={submissions} campus={campus} /></TabsContent>
       <TabsContent value="requirements" className="mt-4"><RequirementCards requirements={requirements} /></TabsContent>
       <TabsContent value="forms" className="mt-4"><TrainingFormLibrary onSubmit={() => setFormOpen(true)} /></TabsContent>

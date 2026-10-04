@@ -1013,9 +1013,9 @@ export default function Home() {
   const [budget, setBudget] = useState("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [popularTags, setPopularTags] = useState<TagStat[]>([]);
-  const [events, setEvents] = useState<EventRecord[]>([]);
-  const [assets, setAssets] = useState<MarketingAsset[]>([]);
-  const [meetings, setMeetings] = useState<MeetingNote[]>([]);
+  const [events, setEvents] = useState<EventRecord[]>(demoEvents);
+  const [assets, setAssets] = useState<MarketingAsset[]>(demoAssets);
+  const [meetings, setMeetings] = useState<MeetingNote[]>(demoMeetings);
   const [selectedEvent, setSelectedEvent] = useState<EventRecord | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<MarketingAsset | null>(null);
   const [selectedMeeting, setSelectedMeeting] = useState<MeetingNote | null>(null);
@@ -1062,14 +1062,12 @@ export default function Home() {
         }
         if (!response.ok) throw new Error("archive unavailable");
         const data = await response.json() as { events?: EventRecord[]; assets?: MarketingAsset[]; meetings?: MeetingNote[] };
-        // 체험판에서만 예시 자료를 섞는다 (실제 자료는 모두 서버에 있음)
-        if (section === "events") setEvents([...(data.events ?? []), ...(demoMode ? filterDemoEvents(query, branch, target, budget, selectedTags) : [])]);
-        else if (section === "marketing") setAssets([...(data.assets ?? []), ...(demoMode ? filterDemoAssets(query, branch, target) : [])]);
-        else setMeetings([...(data.meetings ?? []), ...(demoMode ? filterDemoMeetings(query, selectedTags) : [])]);
+        if (section === "events") setEvents([...(data.events ?? []), ...filterDemoEvents(query, branch, target, budget, selectedTags)]);
+        else if (section === "marketing") setAssets([...(data.assets ?? []), ...filterDemoAssets(query, branch, target)]);
+        else setMeetings([...(data.meetings ?? []), ...filterDemoMeetings(query, selectedTags)]);
       } catch (error) {
         if ((error as Error).name !== "AbortError") {
-          if (!demoMode) toast.error("자료를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
-          else if (section === "events") setEvents(filterDemoEvents(query, branch, target, budget, selectedTags));
+          if (section === "events") setEvents(filterDemoEvents(query, branch, target, budget, selectedTags));
           else if (section === "marketing") setAssets(filterDemoAssets(query, branch, target));
           else setMeetings(filterDemoMeetings(query, selectedTags));
         }
@@ -1081,14 +1079,14 @@ export default function Home() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [branch, budget, demoMode, query, reloadToken, role, section, selectedTags, target]);
+  }, [branch, budget, query, reloadToken, role, section, selectedTags, target]);
 
   useEffect(() => {
     if (!role || (section !== "events" && section !== "meetings")) {
       setPopularTags([]);
       return;
     }
-    const demo = demoMode ? tagStats(section === "events" ? demoEvents : demoMeetings) : [];
+    const demo = tagStats(section === "events" ? demoEvents : demoMeetings);
     fetch(`/api/tags?scope=${section}`, { cache: "no-store" })
       .then(async (response) => response.ok ? response.json() as Promise<{ tags?: TagStat[] }> : { tags: [] })
       .then((data) => {
@@ -1100,7 +1098,7 @@ export default function Home() {
         setPopularTags([...merged.values()].sort((a, b) => b.count - a.count || (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") || a.name.localeCompare(b.name, "ko")));
       })
       .catch(() => setPopularTags(demo));
-  }, [demoMode, reloadToken, role, section]);
+  }, [reloadToken, role, section]);
 
   useEffect(() => {
     if (!role || !document.modelContext?.registerTool) return;
