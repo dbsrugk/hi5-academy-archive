@@ -12,14 +12,15 @@ import { Label } from "@/components/ui/label";
 import { CampusDot } from "@/lib/campus";
 
 export const CAMPUSES = ["센텀", "김해", "명지"] as const;
-export const TITLES = ["원장", "전임", "행정"] as const;
+export const TITLES = ["원장", "전임", "행정", "이사"] as const;
+const ALL_CAMPUS = "전체"; // 이사는 캠퍼스 소속 없음
 type Role = "staff" | "admin";
 
-function NativeSelect({ id, name, options, placeholder = "선택" }: { id: string; name: string; options: readonly string[]; placeholder?: string }) {
+function NativeSelect({ id, name, options, placeholder = "선택", labels = {}, value, onChange, disabled }: { id: string; name: string; options: readonly string[]; placeholder?: string; labels?: Record<string, string>; value?: string; onChange?: (value: string) => void; disabled?: boolean }) {
   return (
-    <select id={id} name={name} required defaultValue="" className="h-12 w-full rounded-xl border border-input bg-background px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <select id={id} name={name} required={!disabled} disabled={disabled} {...(value !== undefined ? { value } : { defaultValue: "" })} onChange={(event) => onChange?.(event.target.value)} className="h-12 w-full rounded-xl border border-input bg-background px-3 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:bg-muted disabled:text-muted-foreground">
       <option value="" disabled>{placeholder}</option>
-      {options.map((value) => <option key={value} value={value}>{value}</option>)}
+      {options.map((option) => <option key={option} value={option}>{labels[option] ?? option}</option>)}
     </select>
   );
 }
@@ -28,6 +29,8 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
   const [tab, setTab] = useState<"login" | "apply">("login");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; ok?: boolean } | null>(null);
+  const [applyTitle, setApplyTitle] = useState("");
+  const director = applyTitle === "이사";
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,10 +55,10 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
     if (form.get("agree") !== "on") { setMessage({ text: "보안서약에 동의해 주세요." }); return; }
     setBusy(true); setMessage(null);
     try {
-      const response = await fetch("/api/auth/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campus: form.get("campus"), title: form.get("title"), name: String(form.get("name") ?? "").trim(), pin, agree: true }) });
+      const response = await fetch("/api/auth/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campus: director ? ALL_CAMPUS : form.get("campus"), title: form.get("title"), name: String(form.get("name") ?? "").trim(), pin, agree: true }) });
       const data = await response.json() as { ok?: boolean; error?: string };
       if (!response.ok || !data.ok) { setMessage({ text: data.error ?? "신청하지 못했어요." }); return; }
-      formElement.reset();
+      formElement.reset(); setApplyTitle("");
       setMessage({ text: "가입 신청이 접수됐어요. 관리자 승인 후 로그인할 수 있어요.", ok: true });
     } catch { setMessage({ text: "연결에 실패했어요. 잠시 후 다시 시도해 주세요." }); }
     finally { setBusy(false); }
@@ -83,7 +86,7 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
             {tab === "login" ? (
               <form className="mt-6 space-y-4" onSubmit={login} autoComplete="on">
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2"><Label htmlFor="login-campus">캠퍼스</Label><NativeSelect id="login-campus" name="campus" options={CAMPUSES} /></div>
+                  <div className="space-y-2"><Label htmlFor="login-campus">캠퍼스</Label><NativeSelect id="login-campus" name="campus" options={[...CAMPUSES, ALL_CAMPUS]} labels={{ [ALL_CAMPUS]: "이사 (캠퍼스 없음)" }} /></div>
                   <div className="space-y-2"><Label htmlFor="login-name">이름</Label><Input id="login-name" name="name" required maxLength={20} autoComplete="name" className="h-12 rounded-xl" /></div>
                 </div>
                 <div className="space-y-2"><Label htmlFor="login-pin">비밀번호 (숫자 4자리)</Label><Input id="login-pin" name="pin" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required autoComplete="current-password" className="h-12 rounded-xl tracking-[0.4em]" /></div>
@@ -92,11 +95,11 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
             ) : (
               <form className="mt-6 space-y-4" onSubmit={apply}>
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2"><Label htmlFor="apply-campus">캠퍼스</Label><NativeSelect id="apply-campus" name="campus" options={CAMPUSES} /></div>
-                  <div className="space-y-2"><Label htmlFor="apply-title">직책</Label><NativeSelect id="apply-title" name="title" options={TITLES} /></div>
+                  <div className="space-y-2"><Label htmlFor="apply-title">직책</Label><NativeSelect id="apply-title" name="title" options={TITLES} value={applyTitle} onChange={setApplyTitle} /></div>
+                  <div className="space-y-2"><Label htmlFor="apply-campus">캠퍼스</Label>{director ? <div className="flex h-12 items-center rounded-xl border border-dashed bg-muted/50 px-3 text-sm text-muted-foreground">캠퍼스 없음 (전체)</div> : <NativeSelect id="apply-campus" name="campus" options={CAMPUSES} />}</div>
                 </div>
                 <div className="space-y-2"><Label htmlFor="apply-name">이름</Label><Input id="apply-name" name="name" required maxLength={20} placeholder="실명으로 입력해 주세요" className="h-12 rounded-xl" /></div>
-                <div className="space-y-2"><Label htmlFor="apply-pin">비밀번호 (숫자 4자리)</Label><Input id="apply-pin" name="pin" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required autoComplete="new-password" className="h-12 rounded-xl tracking-[0.4em]" /><p className="text-xs text-muted-foreground">로그인할 때 캠퍼스 · 이름 · 비밀번호를 사용합니다.</p></div>
+                <div className="space-y-2"><Label htmlFor="apply-pin">비밀번호 (숫자 4자리)</Label><Input id="apply-pin" name="pin" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required autoComplete="new-password" className="h-12 rounded-xl tracking-[0.4em]" /><p className="text-xs text-muted-foreground">로그인할 때 캠퍼스 · 이름 · 비밀번호를 사용합니다.{director && <> 이사는 캠퍼스에서 <b>이사 (캠퍼스 없음)</b>을 고르면 됩니다.</>}</p></div>
                 <div className="max-h-56 overflow-y-auto rounded-xl border bg-muted/40 p-4 text-[13px] leading-6 text-muted-foreground" tabIndex={0}>
                   <h3 className="mb-2 text-sm font-semibold text-foreground">학원 아카이브 보안서약</h3>
                   <ol className="list-decimal space-y-1.5 pl-4">

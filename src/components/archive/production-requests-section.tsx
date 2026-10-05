@@ -74,7 +74,7 @@ function stamp(iso?: string) {
   const d = new Date(iso);
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
-function myCampus() { const me = getMe(); return me ? `${me.campus}캠퍼스` : campuses[0]; }
+function myCampus() { const me = getMe(); return me && me.campus !== "전체" ? `${me.campus}캠퍼스` : campuses[0]; }
 function myName() { const me = getMe(); return me ? `${me.name}${me.title ? " " + me.title : ""}` : ""; }
 
 export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: { role: Role; demoMode: boolean; onOpenMarketing: () => void }) {

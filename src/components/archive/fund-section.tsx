@@ -70,14 +70,14 @@ export function FundSection() {
   if (authenticated === null) return <div className="grid min-h-[460px] place-items-center text-primary"><LoaderCircle className="size-7 animate-spin" /></div>;
 
   if (!authenticated) {
-    return <div className="grid min-h-[460px] place-items-center"><Card className="w-full max-w-md rounded-3xl border-border/80 px-2 py-2"><CardContent className="p-7 text-center sm:p-9"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand"><LockKeyhole className="size-7" /></div><h2 className="mt-6 text-2xl font-semibold">제작실 기금</h2><p className="mt-3 leading-7 text-muted-foreground">제작실 기금은 직책이 원장인 교직원만 열람할 수 있습니다.</p></CardContent></Card></div>;
+    return <div className="grid min-h-[460px] place-items-center"><Card className="w-full max-w-md rounded-3xl border-border/80 px-2 py-2"><CardContent className="p-7 text-center sm:p-9"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand"><LockKeyhole className="size-7" /></div><h2 className="mt-6 text-2xl font-semibold">제작실 기금</h2><p className="mt-3 leading-7 text-muted-foreground">제작실 기금은 직책이 원장·이사인 교직원만 열람할 수 있습니다.</p></CardContent></Card></div>;
   }
 
   if (!data) return <div className="grid min-h-[460px] place-items-center text-primary"><LoaderCircle className="size-7 animate-spin" /></div>;
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card p-4 shadow-[0_10px_35px_rgba(38,33,28,0.06)] sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><p className="font-semibold">{data.accountLabel}</p>{data.demo && <Badge variant="secondary" className="rounded-full">샘플 데이터</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">원장 계정에서만 표시되는 정보입니다.</p></div></div>
+      <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card p-4 shadow-[0_10px_35px_rgba(38,33,28,0.06)] sm:flex-row sm:items-center sm:justify-between"><div><div className="flex items-center gap-2"><p className="font-semibold">{data.accountLabel}</p>{data.demo && <Badge variant="secondary" className="rounded-full">샘플 데이터</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">원장·이사 계정에서만 표시되는 정보입니다.</p></div></div>
 
       <div className="grid gap-3 md:grid-cols-3">
         <FundSummary label="현재 잔액" value={`${won.format(data.currentBalance)}원`} icon={WalletCards} tone="indigo" />

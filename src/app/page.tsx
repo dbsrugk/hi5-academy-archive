@@ -1163,7 +1163,7 @@ export default function Home() {
   // 권한 없는 메뉴로 들어오면 이벤트로 돌린다
   useEffect(() => {
     if (!role) return;
-    if ((role !== "admin" && section === "members") || (section === "fund" && getMe()?.title !== "원장")) {
+    if ((role !== "admin" && section === "members") || (section === "fund" && !["원장", "이사"].includes(getMe()?.title ?? ""))) {
       setSection("events");
       try { history.replaceState({ ...(history.state ?? {}), __section: "events" }, "", "#events"); } catch { /* 무시 */ }
     }
@@ -1297,7 +1297,7 @@ export default function Home() {
                     <FileCheck2 aria-hidden="true" /><span>연간 이수 관리</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-                {me?.title === "원장" && (
+                {(me?.title === "원장" || me?.title === "이사") && (
                 <SidebarMenuItem>
                   <SidebarMenuButton isActive={section === "fund"} tooltip="제작실 기금" onClick={() => changeSection("fund")}>
                     <LockKeyhole aria-hidden="true" /><span>제작실 기금</span>
@@ -1335,7 +1335,7 @@ export default function Home() {
             </div>
             <div className="min-w-0 group-data-[collapsible=icon]:hidden">
               <p className="truncate text-sm font-medium">{me ? `${me.name} ${me.title}` : "교직원"}</p>
-              <p className="truncate text-[13px] text-sidebar-foreground/60">{me ? `${me.campus}캠퍼스 · ${role === "admin" ? "관리자" : "교직원"}` : ""}</p>
+              <p className="truncate text-[13px] text-sidebar-foreground/60">{me ? `${me.campus === "전체" ? "이사 · 전체 캠퍼스" : `${me.campus}캠퍼스`} · ${role === "admin" ? "관리자" : "교직원"}` : ""}</p>
             </div>
           </div>
           <SidebarMenu>
@@ -1345,7 +1345,7 @@ export default function Home() {
       </Sidebar>
 
       <SidebarInset className="min-w-0 bg-[var(--archive-canvas)]">
-        {me && <Watermark text={`${me.campus} ${me.name} · ${new Date().toISOString().slice(0, 10)}`} />}
+        {me && <Watermark text={`${me.campus === "전체" ? "이사" : me.campus} ${me.name} · ${new Date().toISOString().slice(0, 10)}`} />}
         <header className="sticky top-0 z-20 flex h-12 items-center justify-between border-b border-border/70 bg-background/85 px-4 backdrop-blur-xl md:px-7">
           <div className="flex items-center gap-2 text-sm"><span className="relative md:hidden"><SidebarTrigger className="size-8" />{role === "admin" && ((navBadges.requests ?? 0) + (navBadges.members ?? 0)) > 0 && <span className="pointer-events-none absolute top-0.5 right-0.5 size-2 rounded-full bg-amber-500" aria-label="처리할 일 있음" />}</span>{navDepth > 0 && <Button type="button" variant="ghost" size="sm" className="-ml-1 h-8 gap-1 rounded-lg px-2 text-muted-foreground hover:text-foreground" onClick={() => history.back()} aria-label="이전 화면으로"><ArrowLeft className="size-4" /><span className="hidden sm:inline">뒤로</span></Button>}<span className="hidden text-muted-foreground sm:inline">아카이브</span><span className="hidden text-muted-foreground/50 sm:inline">/</span><h2 className="font-medium">{sectionLabel}</h2></div>
           <div className="flex items-center gap-2">

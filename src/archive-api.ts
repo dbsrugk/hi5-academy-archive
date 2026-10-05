@@ -315,7 +315,7 @@ async function requestsPost(body: Json) {
   });
   return json({ id }, 201);
 }
-function whoAmI() { const me = getMe(); return me ? `${me.campus} ${me.name}` : ""; }
+function whoAmI() { const me = getMe(); return me ? `${me.campus === "전체" ? "이사" : me.campus} ${me.name}` : ""; }
 async function requestsPatch(id: string, body: Json) {
   if (!requestStatuses.includes(body?.status)) return bad("변경 내용을 확인해 주세요.");
   const at = now();
@@ -445,7 +445,7 @@ async function route(method: string, path: string, params: URLSearchParams, init
 
     if (head === "fund") {
       if (id === "session") return json({ authenticated: Boolean((await call("fund/session")).authenticated) });
-      if (id === "login" || id === "logout") return json({ authenticated: currentMe?.title === "원장" });
+      if (id === "login" || id === "logout") return json({ authenticated: currentMe?.title === "원장" || currentMe?.title === "이사" });
       return await fundGet();
     }
 

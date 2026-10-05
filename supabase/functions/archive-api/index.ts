@@ -10,7 +10,9 @@ type Member = { id: string; campus: string; title: string; name: string; status:
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const BUCKET = "archive-files";
 const CAMPUSES = ["센텀", "김해", "명지"];
-const TITLES = ["원장", "전임", "행정"];
+const TITLES = ["원장", "전임", "행정", "이사"];
+const ALL_CAMPUS = "전체"; // 이사는 특정 캠퍼스 소속이 아님
+const isPrincipal = (t: string) => t === "원장" || t === "이사";
 const SESSION_DAYS = 14;
 const cors = {
   "access-control-allow-origin": "*",
@@ -164,8 +166,9 @@ async function notifyList(me: Member) {
 
 // ---------- 가입·로그인 ----------
 async function apply(body: Json, ip: string) {
-  const campus = String(body.campus ?? ""), title = String(body.title ?? ""), name = String(body.name ?? "").trim().slice(0, 20), pin = String(body.pin ?? "");
-  if (!CAMPUSES.includes(campus) || !TITLES.includes(title) || name.length < 2) return json({ ok: false, msg: "캠퍼스·직책·이름을 확인해 주세요." });
+  const title = String(body.title ?? ""), name = String(body.name ?? "").trim().slice(0, 20), pin = String(body.pin ?? "");
+  const campus = title === "이사" ? ALL_CAMPUS : String(body.campus ?? "");
+  if (!(CAMPUSES.includes(campus) || campus === ALL_CAMPUS) || !TITLES.includes(title) || name.length < 2) return json({ ok: false, msg: "캠퍼스·직책·이름을 확인해 주세요." });
   if (!/^[0-9]{4}$/.test(pin)) return json({ ok: false, msg: "비밀번호는 숫자 4자리로 입력해 주세요." });
   if (body.agree !== true) return json({ ok: false, msg: "보안서약에 동의해 주세요." });
   const { data: exists } = await supabase.from("members").select("id,status").eq("campus", campus).eq("name", name).maybeSingle();
@@ -230,6 +233,14 @@ async function adminSet(body: Json, me: Member, ip: string) {
   if (body.status) { if (!["approved", "rejected", "suspended", "pending"].includes(body.status)) return json({ ok: false, msg: "잘못된 상태예요." }); patch.status = body.status; }
   if (typeof body.is_admin === "boolean") patch.is_admin = body.is_admin;
   if (typeof body.title === "string") { if (!TITLES.includes(body.title)) return json({ ok: false, msg: "잘못된 직책이에요." }); patch.title = body.title; }
+  if (typeof body.campus === "string") { if (!CAMPUSES.includes(body.campus)) return json({ ok: false, msg: "잘못된 캠퍼스예요." }); patch.campus = body.campus; }
+  if (patch.title || patch.campus) {
+    // 이사 ⇔ 캠퍼스 '전체' 를 항상 맞춘다
+    const { data: cur } = await supabase.from("members").select("title,campus").eq("id", id).maybeSingle();
+    const nextTitle = patch.title ?? cur?.title;
+    if (nextTitle === "이사") patch.campus = ALL_CAMPUS;
+    else if ((patch.campus ?? cur?.campus) === ALL_CAMPUS) return json({ ok: false, msg: "이사가 아닌 직책은 캠퍼스를 먼저 정해 주세요." });
+  }
   if (id === me.id && (patch.status && patch.status !== "approved" || patch.is_admin === false)) return json({ ok: false, msg: "본인 계정은 정지하거나 관리자 해제할 수 없어요." });
   if (!Object.keys(patch).length) return json({ ok: false, msg: "변경할 내용이 없어요." });
   const { data: target, error } = await supabase.from("members").update(patch).eq("id", id).select("campus,name").maybeSingle();
@@ -301,7 +312,7 @@ async function dbGet(collection: string, id: string, role: Role, principal: bool
 async function dbWrite(op: string, body: Json, role: Role, principal: boolean, me: Member) {
   const collection = String(body.collection ?? ""), id = String(body.id ?? "");
   if (!COLLECTIONS.has(collection) || !/^[A-Za-z0-9_.:-]{1,120}$/.test(id)) return json({ error: "잘못된 요청입니다." }, 400);
-  if (collection === "fund" && !principal) return json({ error: "제작실 기금은 원장만 관리할 수 있습니다." }, 403);
+  if (collection === "fund" && !principal) return json({ error: "제작실 기금은 원장·이사만 관리할 수 있습니다." }, 403);
   const { data: existing, error: readError } = await supabase.from("docs").select("data").eq("collection", collection).eq("id", id).maybeSingle();
   if (readError) throw readError;
   if (role !== "admin" && !(collection === "fund" && principal)) {
@@ -361,7 +372,7 @@ Deno.serve(async (req) => {
     if (path === "auth/session") return json(me ? { authenticated: true, role: me.is_admin ? "admin" : "staff", demo: false, me: meOf(me) } : { authenticated: false, role: null, demo: false, logout: true });
     if (!me) return json({ error: "인증이 필요합니다.", logout: true }, 401);
     const role: Role = me.is_admin ? "admin" : "staff";
-    const principal = me.title === "원장";
+    const principal = isPrincipal(me.title);
 
     if (path === "ping") {
       await supabase.from("members").update({ last_seen: now() }).eq("id", me.id);
@@ -378,7 +389,7 @@ Deno.serve(async (req) => {
     }
 
     if (path === "fund/session") return json({ authenticated: principal });
-    if (path === "fund/config") return principal ? json({ accountLabel: (await config()).fund_account_label ?? "제작실 공동계좌" }) : json({ error: "제작실 기금은 원장만 열람할 수 있습니다." }, 403);
+    if (path === "fund/config") return principal ? json({ accountLabel: (await config()).fund_account_label ?? "제작실 공동계좌" }) : json({ error: "제작실 기금은 원장·이사만 열람할 수 있습니다." }, 403);
 
     if (path === "files/sign-upload") return await signUpload(body, role);
     if (path === "files/sign-read") return await signRead(body.keys);
