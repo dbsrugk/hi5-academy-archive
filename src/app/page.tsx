@@ -1335,7 +1335,7 @@ export default function Home() {
             </div>
             <div className="min-w-0 group-data-[collapsible=icon]:hidden">
               <p className="truncate text-sm font-medium">{me ? `${me.name} ${me.title}` : "교직원"}</p>
-              <p className="truncate text-[13px] text-sidebar-foreground/60">{me ? `${me.campus === "전체" ? "이사 · 전체 캠퍼스" : `${me.campus}캠퍼스`} · ${role === "admin" ? "관리자" : "교직원"}` : ""}</p>
+              <p className="truncate text-[13px] text-sidebar-foreground/60">{me ? `${me.campus === "전체" ? "전체 캠퍼스" : `${me.campus}캠퍼스`} · ${role === "admin" ? "관리자" : "교직원"}` : ""}</p>
             </div>
           </div>
           <SidebarMenu>
