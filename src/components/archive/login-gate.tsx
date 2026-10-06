@@ -55,7 +55,7 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
     if (form.get("agree") !== "on") { setMessage({ text: "보안서약에 동의해 주세요." }); return; }
     setBusy(true); setMessage(null);
     try {
-      const response = await fetch("/api/auth/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campus: director ? ALL_CAMPUS : form.get("campus"), title: form.get("title"), name: String(form.get("name") ?? "").trim(), pin, agree: true }) });
+      const response = await fetch("/api/auth/apply", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ campus: director ? ALL_CAMPUS : form.get("campus"), title: form.get("title"), name: String(form.get("name") ?? "").trim(), pin, agree: true, email: String(form.get("email") ?? "").trim() }) });
       const data = await response.json() as { ok?: boolean; error?: string };
       if (!response.ok || !data.ok) { setMessage({ text: data.error ?? "신청하지 못했어요." }); return; }
       formElement.reset(); setApplyTitle("");
@@ -100,6 +100,7 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
                 </div>
                 <div className="space-y-2"><Label htmlFor="apply-name">이름</Label><Input id="apply-name" name="name" required maxLength={20} placeholder="실명으로 입력해 주세요" className="h-12 rounded-xl" /></div>
                 <div className="space-y-2"><Label htmlFor="apply-pin">비밀번호 (숫자 4자리)</Label><Input id="apply-pin" name="pin" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength={4} required autoComplete="new-password" className="h-12 rounded-xl tracking-[0.4em]" /><p className="text-xs text-muted-foreground">로그인할 때 캠퍼스 · 이름 · 비밀번호를 사용합니다.{director && <> 이사는 캠퍼스에서 <b>이사 (캠퍼스 없음)</b>을 고르면 됩니다.</>}</p></div>
+                <div className="space-y-2"><Label htmlFor="apply-email">메일 주소 <span className="font-normal text-muted-foreground">(선택)</span></Label><Input id="apply-email" name="email" type="email" inputMode="email" autoComplete="email" maxLength={120} placeholder="예) hong@gmail.com" className="h-12 rounded-xl" /><p className="text-xs text-muted-foreground">적어 두면 승인 후 제작 요청·승인 소식을 메일로도 받아요. 나중에 '내 정보'에서 바꿀 수 있어요.</p></div>
                 <div className="max-h-56 overflow-y-auto rounded-xl border bg-muted/40 p-4 text-[13px] leading-6 text-muted-foreground" tabIndex={0}>
                   <h3 className="mb-2 text-sm font-semibold text-foreground">학원 아카이브 보안서약</h3>
                   <ol className="list-decimal space-y-1.5 pl-4">

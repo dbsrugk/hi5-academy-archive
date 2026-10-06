@@ -87,6 +87,12 @@ export const notifyApi = {
   unsubscribe: (endpoint: string) => call("push/unsubscribe", { endpoint }),
   test: () => call("push/test"),
 };
+export type Profile = { ok: boolean; msg?: string; email: string; emailOn: boolean; mailReady: boolean };
+export const profileApi = {
+  get: () => call("me/profile") as Promise<Profile>,
+  save: (email: string, emailOn: boolean) => call("me/profile", { set: true, email, emailOn }) as Promise<Profile>,
+  testMail: () => call("mail/test") as Promise<{ ok: boolean; msg?: string }>,
+};
 
 // ---------- DB 헬퍼 ----------
 async function all(collection: string): Promise<Json[]> { return (await call("db/list", { collection })).docs ?? []; }

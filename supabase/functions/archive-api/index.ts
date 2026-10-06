@@ -78,7 +78,9 @@ async function log(member: { id?: string; name?: string } | null, action: string
 }
 
 // ---------- 알림 (알림함 + 휴대폰 웹 푸시) ----------
-type Note = { kind: string; title: string; body?: string; link?: string; ref?: string };
+type Note = { kind: string; title: string; body?: string; link?: string; ref?: string; mail?: boolean };
+const SITE = "https://hi5-academy-archive.vercel.app/";
+const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 let vapidReady = false;
 async function setupVapid() {
   if (vapidReady) return true;
@@ -112,10 +114,46 @@ async function sendPush(memberIds: string[], n: Note) {
     }
   }));
 }
-// 알림함에 기록하고 휴대폰으로도 보낸다. ref가 같으면 한 번만.
-async function notify(memberIds: string[], n: Note) {
+// ---------- 메일 (구글 Apps Script 중계) ----------
+const esc = (s: string) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
+function mailHtml(heading: string, items: { title: string; body?: string }[], link = "") {
+  const url = SITE + (link.startsWith("#") ? link : "");
+  const rows = items.map((it) => `<tr><td style="padding:14px 16px;border-bottom:1px solid #eef0f4"><div style="font-size:15px;font-weight:700;color:#111827">${esc(it.title)}</div>${it.body ? `<div style="margin-top:4px;font-size:14px;color:#4b5563;line-height:1.5">${esc(it.body)}</div>` : ""}</td></tr>`).join("");
+  return `<!doctype html><html><body style="margin:0;background:#f4f5f8;font-family:-apple-system,'Apple SD Gothic Neo','Malgun Gothic',sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f5f8;padding:24px 12px"><tr><td align="center">
+<table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border-radius:14px;overflow:hidden;border:1px solid #e5e7eb">
+<tr><td style="background:#1e3a8a;padding:16px 20px;color:#fff;font-size:13px;letter-spacing:.3px">하이파이브 아카이브 · 알림</td></tr>
+<tr><td style="padding:18px 16px 6px;font-size:17px;font-weight:800;color:#111827">${esc(heading)}</td></tr>
+${rows}
+<tr><td align="center" style="padding:20px"><a href="${url}" style="display:inline-block;background:#1e3a8a;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:11px 22px;border-radius:10px">사이트에서 보기</a></td></tr>
+<tr><td style="padding:0 20px 18px;font-size:12px;color:#9ca3af;line-height:1.5">이 메일은 아카이브 '내 정보'에서 메일 알림을 켜 두셔서 보내 드렸어요. 끄려면 사이트 왼쪽 아래 내 이름을 눌러 주세요.</td></tr>
+</table></td></tr></table></body></html>`;
+}
+async function relay(to: string, subject: string, html: string) {
+  const c = await config();
+  if (!c.mail_relay_url || !c.mail_relay_secret) return { ok: false, reason: "not-configured" };
+  const r = await fetch(c.mail_relay_url, { method: "POST", headers: { "content-type": "text/plain;charset=utf-8" }, body: JSON.stringify({ secret: c.mail_relay_secret, to, subject, html }), redirect: "follow", signal: AbortSignal.timeout(20_000) });
+  const text = await r.text();
+  let out: Json = {};
+  try { out = JSON.parse(text); } catch { out = { ok: false, reason: `HTTP ${r.status}` }; }
+  if (!out.ok) console.error("[mail]", r.status, text.slice(0, 200));
+  return out;
+}
+async function mailTargets(memberIds: string[]) {
+  if (!memberIds.length) return [];
+  const { data } = await supabase.from("members").select("id,email").in("id", memberIds).eq("email_on", true).eq("status", "approved").not("email", "is", null);
+  return (data ?? []) as { id: string; email: string }[];
+}
+async function sendMail(memberIds: string[], n: Note) {
+  const c = await config();
+  if (!c.mail_relay_url) return;
+  for (const t of await mailTargets(memberIds)) await relay(t.email, `[아카이브] ${n.title.replace(/^\S+\s/, "")}`, mailHtml(n.title, [{ title: n.title, body: n.body }], n.link)).catch((e) => console.error("[mail]", e));
+}
+
+// 알림함에 기록하고 휴대폰·메일로도 보낸다. ref가 같으면 한 번만.
+async function notify(memberIds: string[], n: Note): Promise<string[]> {
   const ids = [...new Set(memberIds.filter(Boolean))];
-  if (!ids.length) return;
+  if (!ids.length) return [];
   const sent: string[] = [];
   for (const member_id of ids) {
     const { error } = await supabase.from("notifications").insert({ member_id, kind: n.kind, title: n.title.slice(0, 120), body: (n.body ?? "").slice(0, 400), link: n.link ?? null, ref: n.ref ?? null });
@@ -123,6 +161,8 @@ async function notify(memberIds: string[], n: Note) {
     else if (error.code !== "23505") console.error("[notify]", error);
   }
   await sendPush(sent, n);
+  if (n.mail !== false) await sendMail(sent, n);
+  return sent;
 }
 const shortCampus = (b: string) => String(b ?? "").replace("캠퍼스", "");
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
@@ -139,14 +179,25 @@ async function dailyCheck() {
   const today = kstToday(), soon = addDays(today, 2);
   const admins = await adminIds();
   let count = 0;
+  const digest = new Map<string, { title: string; body?: string }[]>();
+  const add = (ids: string[], n: Note) => ids.forEach((id) => digest.set(id, [...(digest.get(id) ?? []), { title: n.title, body: n.body }]));
   for (const row of data ?? []) {
     const r = row.data as Json;
     const due = r.revisedDueDate || r.desiredDate;
     if (!due || r.status === "completed") continue;
     if (r.status === "approval_pending" && due <= soon) {
-      await notify(admins, { kind: "deadline", title: "⏰ 마감이 가까운데 아직 승인 대기예요", body: `${shortCampus(r.branch)} · '${r.title}' · 마감 ${due}`, link: "#requests", ref: `pending-${row.id}-${today}` }); count++;
+      const n: Note = { kind: "deadline", title: "⏰ 마감이 가까운데 아직 승인 대기예요", body: `${shortCampus(r.branch)} · '${r.title}' · 마감 ${due}`, link: "#requests", ref: `pending-${row.id}-${today}`, mail: false };
+      add(await notify(admins, n), n); count++;
     } else if (r.status !== "approval_pending" && due < today) {
-      await notify([...admins, r.createdById].filter(Boolean), { kind: "deadline", title: "🚨 마감일이 지났어요", body: `${shortCampus(r.branch)} · '${r.title}' · 마감 ${due} · ${r.assignee || "담당 미정"}`, link: "#requests", ref: `late-${row.id}-${today}` }); count++;
+      const n: Note = { kind: "deadline", title: "🚨 마감일이 지났어요", body: `${shortCampus(r.branch)} · '${r.title}' · 마감 ${due} · ${r.assignee || "담당 미정"}`, link: "#requests", ref: `late-${row.id}-${today}`, mail: false };
+      add(await notify([...admins, r.createdById].filter(Boolean), n), n); count++;
+    }
+  }
+  // 메일은 사람마다 한 통으로 묶어서
+  if ((await config()).mail_relay_url) {
+    for (const t of await mailTargets([...digest.keys()])) {
+      const items = digest.get(t.id)!;
+      await relay(t.email, `[아카이브] 오늘 확인할 제작 요청 ${items.length}건`, mailHtml(`📋 오늘 확인할 제작 요청 ${items.length}건`, items, "#requests")).catch((e) => console.error("[mail]", e));
     }
   }
   return count;
@@ -171,10 +222,12 @@ async function apply(body: Json, ip: string) {
   if (!(CAMPUSES.includes(campus) || campus === ALL_CAMPUS) || !TITLES.includes(title) || name.length < 2) return json({ ok: false, msg: "캠퍼스·직책·이름을 확인해 주세요." });
   if (!/^[0-9]{4}$/.test(pin)) return json({ ok: false, msg: "비밀번호는 숫자 4자리로 입력해 주세요." });
   if (body.agree !== true) return json({ ok: false, msg: "보안서약에 동의해 주세요." });
+  const email = String(body.email ?? "").trim().slice(0, 120);
+  if (email && !EMAIL_RE.test(email)) return json({ ok: false, msg: "메일 주소 형식을 확인해 주세요." });
   const { data: exists } = await supabase.from("members").select("id,status").eq("campus", campus).eq("name", name).maybeSingle();
   if (exists) return json({ ok: false, msg: exists.status === "pending" ? "이미 신청되어 승인을 기다리고 있어요." : "같은 캠퍼스에 같은 이름이 이미 등록되어 있어요. 관리자에게 문의해 주세요." });
   const salt = crypto.randomUUID();
-  const { data, error } = await supabase.from("members").insert({ campus, title, name, pin_salt: salt, pin_hash: await pinHash(pin, salt), pledge_at: now() }).select("id").single();
+  const { data, error } = await supabase.from("members").insert({ campus, title, name, pin_salt: salt, pin_hash: await pinHash(pin, salt), pledge_at: now(), email: email || null, email_on: !!email }).select("id").single();
   if (error) throw error;
   await log({ id: data.id, name }, "apply", `${campus} ${title}`, ip);
   background(adminIds().then((ids) => notify(ids, { kind: "member", title: "🙋 새 가입 신청이 있어요", body: `${campus} ${title} ${name} · 회원 관리에서 승인해 주세요`, link: "#admin", ref: `apply-${data.id}` })));
@@ -202,7 +255,7 @@ async function login(body: Json, ip: string) {
 
 // ---------- 관리자 ----------
 async function adminList() {
-  const { data: members, error } = await supabase.from("members").select("id,campus,title,name,status,is_admin,pledge_at,last_seen,created_at").order("created_at", { ascending: false });
+  const { data: members, error } = await supabase.from("members").select("id,campus,title,name,status,is_admin,pledge_at,last_seen,created_at,email,email_on").order("created_at", { ascending: false });
   if (error) throw error;
   return json({ ok: true, members });
 }
@@ -416,6 +469,23 @@ Deno.serve(async (req) => {
     if (path === "push/unsubscribe") {
       await supabase.from("push_subscriptions").delete().eq("member_id", me.id).eq("endpoint", String(body.endpoint ?? ""));
       return json({ ok: true });
+    }
+    if (path === "me/profile") {
+      if (body.set) {
+        const email = String(body.email ?? "").trim().slice(0, 120);
+        if (email && !EMAIL_RE.test(email)) return json({ ok: false, msg: "메일 주소 형식을 확인해 주세요." });
+        const { error } = await supabase.from("members").update({ email: email || null, email_on: !!email && body.emailOn === true }).eq("id", me.id);
+        if (error) throw error;
+      }
+      const { data } = await supabase.from("members").select("email,email_on").eq("id", me.id).single();
+      return json({ ok: true, email: data?.email ?? "", emailOn: !!data?.email_on, mailReady: !!(await config()).mail_relay_url });
+    }
+    if (path === "mail/test") {
+      const { data } = await supabase.from("members").select("email").eq("id", me.id).single();
+      if (!data?.email) return json({ ok: false, msg: "먼저 메일 주소를 저장해 주세요." });
+      if (!(await config()).mail_relay_url) return json({ ok: false, msg: "메일 발송 연결이 아직 안 됐어요. 관리자에게 알려 주세요." });
+      const r = await relay(data.email, "[아카이브] 메일 알림이 잘 와요!", mailHtml("📬 메일 알림이 잘 와요!", [{ title: `${me.name} 선생님, 연결 완료!`, body: "앞으로 제작 요청·승인·마감 소식을 이 메일로도 알려드릴게요." }], "#requests"));
+      return json(r.ok ? { ok: true } : { ok: false, msg: "메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요." });
     }
     if (path === "push/test") {
       await notify([me.id], { kind: "test", title: "🔔 알림이 잘 와요!", body: "앞으로 제작 요청·승인 소식을 이렇게 알려드릴게요.", link: "#requests" });

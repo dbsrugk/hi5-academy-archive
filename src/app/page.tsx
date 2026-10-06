@@ -2,6 +2,7 @@
 
 import { RichNote, RichLines } from "@/components/archive/rich-note";
 import { NotificationCenter } from "@/components/archive/notification-center";
+import { ProfileDialog } from "@/components/archive/profile-dialog";
 import Image from "next/image";
 import { CampusDot, CampusLabel, campusColor, campusShort } from "@/lib/campus";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -41,6 +42,7 @@ import {
   ChevronDown,
   UserCog,
   ArrowLeft,
+  Settings,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -100,10 +102,10 @@ function hashToSection(hash: string): Section | null {
   const key = hash.replace(/^#/, "").split(/[/?]/)[0];
   return (Object.entries(SECTION_HASH).find(([, value]) => value === key)?.[0] as Section | undefined) ?? null;
 }
-// 휴대폰에서 메뉴를 고르면 옆 메뉴판을 닫는다
-function MobileSidebarAutoClose({ section }: { section: string }) {
+// 휴대폰에서 메뉴를 고르거나 '내 정보'를 열면 옆 메뉴판을 닫는다
+function MobileSidebarAutoClose({ section, profileOpen = false }: { section: string; profileOpen?: boolean }) {
   const { setOpenMobile } = useSidebar();
-  useEffect(() => { setOpenMobile(false); }, [section, setOpenMobile]);
+  useEffect(() => { setOpenMobile(false); }, [section, profileOpen, setOpenMobile]);
   return null;
 }
 type PublishStatus = "draft" | "published";
@@ -1024,6 +1026,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
   const [navBadges, setNavBadges] = useState<{ requests?: number; members?: number }>({});
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     fetch("/api/auth/session", { cache: "no-store" })
@@ -1248,7 +1251,7 @@ export default function Home() {
 
   return (
     <SidebarProvider>
-      <MobileSidebarAutoClose section={section} />
+      <MobileSidebarAutoClose section={section} profileOpen={profileOpen} />
       <Sidebar collapsible="icon" className="border-r border-sidebar-border">
         <SidebarHeader className="p-4">
           <div className="flex items-center gap-3 overflow-hidden">
@@ -1329,7 +1332,7 @@ export default function Home() {
           )}
         </SidebarContent>
         <SidebarFooter className="p-3">
-          <div className="flex items-center gap-3 rounded-xl bg-sidebar-accent p-3 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2">
+          <button type="button" disabled={demoMode || !me} onClick={() => setProfileOpen(true)} title="내 정보 · 메일 알림" className="flex w-full items-center gap-3 rounded-xl bg-sidebar-accent p-3 text-left transition hover:ring-2 hover:ring-primary/20 disabled:hover:ring-0 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2">
             <div className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary">
               {role === "admin" ? <ShieldCheck className="size-4" /> : <KeyRound className="size-4" />}
             </div>
@@ -1337,7 +1340,8 @@ export default function Home() {
               <p className="truncate text-sm font-medium">{me ? `${me.name} ${me.title}` : "교직원"}</p>
               <p className="truncate text-[13px] text-sidebar-foreground/60">{me ? `${me.campus === "전체" ? "전체 캠퍼스" : `${me.campus}캠퍼스`} · ${role === "admin" ? "관리자" : "교직원"}` : ""}</p>
             </div>
-          </div>
+            {!demoMode && me && <Settings className="ml-auto size-4 shrink-0 text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden" />}
+          </button>
           <SidebarMenu>
             <SidebarMenuItem><SidebarMenuButton tooltip="로그아웃" onClick={logout}><LogOut /><span>로그아웃</span></SidebarMenuButton></SidebarMenuItem>
           </SidebarMenu>
@@ -1351,7 +1355,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             {(role === "admin" || (demoMode && section === "marketing")) && (section === "events" || section === "marketing" || section === "meetings") && <Button size="sm" className="rounded-xl" onClick={() => setEditorOpen(true)}><Plus className="size-4" />새 자료 등록</Button>}
             <Badge variant="secondary" className="hidden gap-1.5 rounded-full px-3 py-1.5 font-medium text-emerald-700 sm:inline-flex dark:text-emerald-300"><Archive className="size-3.5" />{demoMode ? "체험판" : "직원 전용"}</Badge>
-            {!demoMode && <NotificationCenter onBadges={setNavBadges} onNavigate={(link) => { const next = hashToSection(link); if (next) changeSection(next); }} />}
+            {!demoMode && <NotificationCenter onBadges={setNavBadges} onOpenProfile={() => setProfileOpen(true)} onNavigate={(link) => { const next = hashToSection(link); if (next) changeSection(next); }} />}
           </div>
         </header>
 
@@ -1404,6 +1408,7 @@ export default function Home() {
         </DialogContent>
       </Dialog>
       <Toaster richColors position="top-center" />
+      {!demoMode && <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} me={me} isAdmin={role === "admin"} />}
     </SidebarProvider>
   );
 }

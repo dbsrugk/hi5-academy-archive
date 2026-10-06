@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, BellOff, BellRing, CheckCheck, ClipboardList, LoaderCircle, Send, Share, Smartphone, UserPlus, AlarmClock } from "lucide-react";
+import { Mail, Bell, BellOff, BellRing, CheckCheck, ClipboardList, LoaderCircle, Send, Share, Smartphone, UserPlus, AlarmClock } from "lucide-react";
 import { toast } from "sonner";
 
 import { notifyApi, type NotificationItem, type NotificationState } from "@/archive-api";
@@ -32,7 +32,7 @@ function ago(iso: string) {
 }
 const kindIcon: Record<string, typeof Bell> = { request: ClipboardList, member: UserPlus, deadline: AlarmClock, test: BellRing };
 
-export function NotificationCenter({ onNavigate, onBadges }: { onNavigate: (link: string) => void; onBadges?: (badges: NotificationState["badges"]) => void }) {
+export function NotificationCenter({ onNavigate, onBadges, onOpenProfile }: { onNavigate: (link: string) => void; onBadges?: (badges: NotificationState["badges"]) => void; onOpenProfile?: () => void }) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<NotificationState | null>(null);
   const [push, setPush] = useState<PushState>("checking");
@@ -120,7 +120,7 @@ export function NotificationCenter({ onNavigate, onBadges }: { onNavigate: (link
           <SheetDescription>제작 요청·승인·가입 신청 소식이 여기에 모여요.</SheetDescription>
         </SheetHeader>
 
-        <div className="border-b p-4"><PushCard state={push} busy={busy} devices={state?.devices ?? 0} onEnable={enablePush} onDisable={disablePush} onTest={sendTest} /></div>
+        <div className="border-b p-4"><PushCard state={push} busy={busy} devices={state?.devices ?? 0} onEnable={enablePush} onDisable={disablePush} onTest={sendTest} />{onOpenProfile && <button type="button" onClick={() => { setOpen(false); onOpenProfile(); }} className="mt-2 flex w-full items-center justify-between rounded-xl border border-dashed px-3 py-2.5 text-left text-sm text-muted-foreground hover:bg-muted/40"><span className="flex items-center gap-2"><Mail className="size-4" />메일로도 받기 설정</span><span aria-hidden>›</span></button>}</div>
 
         <div className="flex-1 overflow-y-auto">
           {!state && <p className="p-8 text-center text-sm text-muted-foreground"><LoaderCircle className="mr-1 inline size-4 animate-spin" />불러오는 중…</p>}
