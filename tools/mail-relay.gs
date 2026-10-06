@@ -1,6 +1,6 @@
 // 하이파이브 아카이브 메일 중계 (Google Apps Script)
 // 사이트 서버가 보낸 알림을 이 구글 계정의 Gmail로 발송합니다.
-const SECRET = "337ac1dc4b3f118c82aa4017245dbea497d4"; // 사이트와 맞춘 비밀키 (바꾸지 마세요)
+const SECRET = "여기에_비밀키"; // 안내받은 비밀키로 바꿔 붙여넣기 (저장소에는 올리지 않음)
 
 function doPost(e) {
   try {
