@@ -22,9 +22,9 @@ export type PromotionLocation = { id?: string; school: string; schoolLevel: stri
 type PromotionImage = { src: string; name?: string };
 export type PromotionCampaign = { id: string; title: string; branch: string; activityDate: string; channel?: "offline" | "online"; promotionType: string; manager: string; expense: number | null; activityCount?: number; platform?: string; campaignStart?: string; campaignEnd?: string; impressions?: number; clicks?: number; inquiries?: number; status: "planned" | "completed"; notes: string; imageUrl: string | null; galleryImages?: PromotionImage[]; locations: PromotionLocation[]; visibility?: "draft" | "published"; demo?: boolean };
 
-const campuses = ["센텀캠퍼스", "김해캠퍼스", "명지캠퍼스", "사우캠퍼스", "장기캠퍼스", "구래캠퍼스", "검단캠퍼스"] as const;
-const short: Record<string, string> = { 센텀캠퍼스: "센텀", 김해캠퍼스: "김해", 명지캠퍼스: "명지", 사우캠퍼스: "사우", 장기캠퍼스: "장기", 구래캠퍼스: "구래", 검단캠퍼스: "검단" };
-const colors: Record<string, string> = { 센텀캠퍼스: "#4f6df5", 김해캠퍼스: "#24a89a", 명지캠퍼스: "#9567e8", 사우캠퍼스: "#e0663f", 장기캠퍼스: "#c2457a", 구래캠퍼스: "#2b9aa8", 검단캠퍼스: "#a0782a" };
+const campuses = ["센텀캠퍼스", "김해캠퍼스", "명지캠퍼스", "사우캠퍼스", "장기캠퍼스", "구래캠퍼스", "검단캠퍼스", "김포 공동"] as const;
+const short: Record<string, string> = { 센텀캠퍼스: "센텀", 김해캠퍼스: "김해", 명지캠퍼스: "명지", 사우캠퍼스: "사우", 장기캠퍼스: "장기", 구래캠퍼스: "구래", 검단캠퍼스: "검단", "김포 공동": "김포공동" };
+const colors: Record<string, string> = { 센텀캠퍼스: "#4f6df5", 김해캠퍼스: "#24a89a", 명지캠퍼스: "#9567e8", 사우캠퍼스: "#e0663f", 장기캠퍼스: "#c2457a", 구래캠퍼스: "#2b9aa8", 검단캠퍼스: "#a0782a", "김포 공동": "#5b7a2e" };
 const pieColors = ["#4f6df5", "#24a89a", "#9567e8", "#f1a84b"];
 
 const samples = [
