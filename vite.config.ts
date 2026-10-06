@@ -15,5 +15,5 @@ export default defineConfig({
   },
   define: { "process.env.NODE_ENV": JSON.stringify("production") },
   build: { outDir: "dist", assetsDir: "assets", cssCodeSplit: false, chunkSizeWarningLimit: 4000,
-    rollupOptions: { output: { entryFileNames: "assets/app.js", assetFileNames: "assets/[name][extname]", inlineDynamicImports: true } } },
+    rollupOptions: { output: { entryFileNames: "assets/app.js", chunkFileNames: "assets/[name]-[hash].js", assetFileNames: "assets/[name][extname]" } } },
 });

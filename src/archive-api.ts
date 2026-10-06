@@ -394,15 +394,68 @@ async function compliancePost(body: Json, role: Role) {
 }
 
 // ---------- 제작실 기금 ----------
+// 잔액은 저장하지 않고 날짜 순서대로 매번 계산한다 (수정·삭제해도 항상 맞게)
+export type FundRow = { id: string; transactionDate: string; category: string; description: string; income: number; expense: number; memo: string; receiptKey: string | null; createdAt: string };
+const kstMonth = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 7);
 async function fundGet() {
   const [{ accountLabel }, rows] = await Promise.all([call("fund/config"), all("fund")]);
-  const stored = rows.sort((a, b) => byDesc("transactionDate")(a, b) || byDesc("createdAt")(a, b)).slice(0, 100);
-  await ensureBlobs(stored.map((t) => t.receiptKey));
-  const transactions = stored.map((t) => ({ id: t.id, transactionDate: String(t.transactionDate), category: t.category ?? "", description: t.description ?? "", income: Number(t.income ?? 0), expense: Number(t.expense ?? 0), balance: Number(t.balance ?? 0), receiptUrl: fileUrl(t.receiptKey) }));
-  const month = transactions[0]?.transactionDate.slice(0, 7) ?? "";
+  const asc = rows.filter((t) => /^\d{4}-\d{2}-\d{2}$/.test(String(t.transactionDate ?? ""))).sort((a, b) => String(a.transactionDate).localeCompare(String(b.transactionDate)) || String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")) || String(a.id).localeCompare(String(b.id)));
+  await ensureBlobs(asc.map((t) => t.receiptKey));
+  let balance = 0;
+  const transactions = asc.map((t) => {
+    const income = Number(t.income ?? 0) || 0, expense = Number(t.expense ?? 0) || 0;
+    balance += income - expense;
+    return { id: t.id, transactionDate: String(t.transactionDate), category: t.category ?? "", description: t.description ?? "", memo: t.memo ?? "", income, expense, balance, receiptKey: t.receiptKey ?? null, receiptUrl: fileUrl(t.receiptKey), createdAt: t.createdAt ?? "" };
+  }).reverse();
+  const month = kstMonth();
   const monthly = transactions.filter((t) => t.transactionDate.startsWith(month));
-  return json({ accountLabel, currentBalance: transactions[0]?.balance ?? 0, monthlyIncome: monthly.reduce((s, t) => s + t.income, 0), monthlyExpense: monthly.reduce((s, t) => s + t.expense, 0), transactions, demo: false });
+  return json({ accountLabel, currentBalance: balance, month, monthlyIncome: monthly.filter((t) => !t.category.startsWith("이월")).reduce((s, t) => s + t.income, 0), monthlyExpense: monthly.reduce((s, t) => s + t.expense, 0), transactions, demo: false });
 }
+async function sha(text: string) { return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))).slice(0, 20); }
+function hex(buf: ArrayBuffer) { return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join(""); }
+const cleanFund = (r: Partial<FundRow>) => ({
+  transactionDate: String(r.transactionDate ?? ""), category: String(r.category ?? "기타").slice(0, 30), description: String(r.description ?? "").slice(0, 200),
+  income: Math.max(0, Math.round(Number(r.income) || 0)), expense: Math.max(0, Math.round(Number(r.expense) || 0)), memo: String(r.memo ?? "").slice(0, 300), receiptKey: r.receiptKey ?? null,
+});
+export const fundApi = {
+  /** 업로드한 줄들의 고유번호 — 같은 파일을 두 번 올려도 중복 등록되지 않게 */
+  async importIds(rows: Partial<FundRow>[]) {
+    const seen = new Map<string, number>();
+    const ids: string[] = [];
+    for (const r of rows) {
+      const c = cleanFund(r);
+      const base = [c.transactionDate, c.category, c.description, c.income, c.expense].join("|");
+      const n = (seen.get(base) ?? 0) + 1; seen.set(base, n);
+      ids.push("fu-" + await sha(`${base}|${n}`));
+    }
+    return ids;
+  },
+  async importRows(rows: (Partial<FundRow> & { id: string })[], onProgress?: (done: number) => void) {
+    let done = 0;
+    const at = now();
+    const queue = [...rows];
+    await Promise.all(Array.from({ length: 4 }, async () => {
+      for (let r = queue.shift(); r; r = queue.shift()) {
+        await setDoc("fund", r.id, { ...cleanFund(r), source: "upload", createdAt: at, createdBy: whoAmI() });
+        onProgress?.(++done);
+      }
+    }));
+  },
+  async save(row: Partial<FundRow>) {
+    if (row.id) { await updateDoc("fund", row.id, { ...cleanFund(row), updatedAt: now(), updatedBy: whoAmI() }); return row.id; }
+    const id = "fm-" + crypto.randomUUID().replaceAll("-", "").slice(0, 20);
+    await setDoc("fund", id, { ...cleanFund(row), source: "manual", createdAt: now(), createdBy: whoAmI() });
+    return id;
+  },
+  remove: (id: string) => deleteDoc("fund", id),
+  async uploadReceipt(file: File) {
+    const signed = await call("files/sign-upload", { name: file.name, type: file.type, size: file.size, purpose: "certificate" });
+    const put = await fetchNative(signed.signedUrl, { method: "PUT", headers: { "content-type": file.type || "application/octet-stream", "x-upsert": "false" }, body: file });
+    if (!put.ok) throw new ApiError(put.status, "영수증을 올리지 못했습니다.");
+    fileCache.set(signed.key, { url: URL.createObjectURL(file), at: Date.now() });
+    return String(signed.key);
+  },
+};
 
 // ---------- 라우터 ----------
 const archiveCollections: Record<string, string> = { events: "events", marketing: "marketing", meetings: "meetings" };
