@@ -457,6 +457,40 @@ export const fundApi = {
   },
 };
 
+// ---------- 전국 Hi5 소식 (밴드 소식·양식 모음) ----------
+export type NewsFile = { key: string; name: string; size?: number; url?: string | null };
+export type NewsItem = { id: string; title: string; body: string; category: string; author: string; postedAt: string; deadline: string | null; files: NewsFile[]; bandUrl: string; photos: number; source: string };
+export const newsApi = {
+  async list(): Promise<NewsItem[]> {
+    const rows = await all("nationalNews");
+    await ensureBlobs(rows.flatMap((r) => (Array.isArray(r.files) ? r.files.map((f: Json) => f.key) : [])));
+    return rows.map((r) => ({
+      id: r.id, title: String(r.title ?? ""), body: String(r.body ?? ""), category: String(r.category ?? "공지"), author: String(r.author ?? ""),
+      postedAt: String(r.postedAt ?? r.createdAt ?? ""), deadline: r.deadline || null, bandUrl: String(r.bandUrl ?? ""), photos: Number(r.photos ?? 0) || 0, source: String(r.source ?? "manual"),
+      files: (Array.isArray(r.files) ? r.files : []).map((f: Json) => ({ key: String(f.key), name: String(f.name ?? f.key), size: Number(f.size ?? 0) || undefined, url: fileUrl(String(f.key)) })),
+    })).sort((a, b) => b.postedAt.localeCompare(a.postedAt));
+  },
+  async save(item: Partial<NewsItem>) {
+    const data = {
+      title: String(item.title ?? "").trim().slice(0, 200), body: String(item.body ?? "").slice(0, 20000), category: String(item.category ?? "공지").slice(0, 20), author: String(item.author ?? "").slice(0, 60),
+      postedAt: String(item.postedAt ?? now()), deadline: item.deadline || null, bandUrl: String(item.bandUrl ?? "").slice(0, 300), photos: Number(item.photos ?? 0) || 0,
+      files: (item.files ?? []).map((f) => ({ key: f.key, name: f.name, size: f.size ?? null })),
+    };
+    if (item.id) { await updateDoc("nationalNews", item.id, { ...data, updatedAt: now(), updatedBy: whoAmI() }); return item.id; }
+    const id = "nn-" + crypto.randomUUID().replaceAll("-", "").slice(0, 20);
+    await setDoc("nationalNews", id, { ...data, source: "manual", createdAt: now(), createdBy: whoAmI() });
+    return id;
+  },
+  remove: (id: string) => deleteDoc("nationalNews", id),
+  uploadFile: (file: File) => fundApi.uploadReceipt(file),
+  /** 원래 파일 이름으로 내려받는 주소 */
+  downloadUrl(f: NewsFile) {
+    const url = fileUrl(f.key);
+    if (!url || !url.startsWith("http")) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}download=${encodeURIComponent(f.name)}`;
+  },
+};
+
 // ---------- 라우터 ----------
 const archiveCollections: Record<string, string> = { events: "events", marketing: "marketing", meetings: "meetings" };
 
