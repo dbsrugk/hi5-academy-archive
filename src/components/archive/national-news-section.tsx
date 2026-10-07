@@ -69,6 +69,18 @@ export function NationalNewsSection({ role }: { role: "staff" | "admin" }) {
     return () => { stale = true; };
   }, [reload]);
 
+  // 알림에서 눌러 들어오면 그 글을 바로 연다 (#national?open=id)
+  useEffect(() => {
+    if (!items) return;
+    const tryOpen = (id?: string | null) => { const hit = id && items.find((it) => it.id === id); if (hit) { setOpen(hit); try { sessionStorage.removeItem("archive-open"); } catch { /* 무시 */ } } };
+    let pending: string | null = null;
+    try { pending = sessionStorage.getItem("archive-open"); } catch { /* 무시 */ }
+    tryOpen(location.hash.match(/open=([\w-]+)/)?.[1] ?? pending);
+    const onOpen = (e: Event) => tryOpen((e as CustomEvent<string>).detail);
+    window.addEventListener("archive-open", onOpen);
+    return () => window.removeEventListener("archive-open", onOpen);
+  }, [items]);
+
   const q = query.trim().toLowerCase();
   const filtered = useMemo(() => (items ?? []).filter((it) => (category === "전체" || it.category === category) && (!q || `${it.title} ${it.body} ${it.author} ${it.files.map((f) => f.name).join(" ")}`.toLowerCase().includes(q))), [items, category, q]);
   const upcoming = useMemo(() => (items ?? []).filter((it) => it.deadline && dayDiff(it.deadline) >= 0).sort((a, b) => a.deadline!.localeCompare(b.deadline!)), [items]);

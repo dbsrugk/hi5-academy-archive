@@ -164,6 +164,70 @@ async function notify(memberIds: string[], n: Note): Promise<string[]> {
   if (n.mail !== false) await sendMail(sent, n);
   return sent;
 }
+// 여러 건이 연달아 올라오면 한 줄로 묶는다 ("… 외 N건"). 휴대폰·메일은 첫 건만.
+async function notifyGrouped(memberIds: string[], n: Note & { ref: string }) {
+  const ids = [...new Set(memberIds.filter(Boolean))];
+  const fresh: string[] = [];
+  for (const member_id of ids) {
+    const { error } = await supabase.from("notifications").insert({ member_id, kind: n.kind, title: n.title.slice(0, 120), body: (n.body ?? "").slice(0, 400), link: n.link ?? null, ref: n.ref, count: 1 });
+    if (!error) { fresh.push(member_id); continue; }
+    if (error.code !== "23505") { console.error("[notify]", error); continue; }
+    const { data: row } = await supabase.from("notifications").select("id,count,title").eq("member_id", member_id).eq("ref", n.ref).maybeSingle();
+    if (!row) continue;
+    const count = (row.count ?? 1) + 1;
+    await supabase.from("notifications").update({ count, body: `${(n.body ?? "").slice(0, 300)}${n.body ? " · " : ""}외 ${count - 1}건 더`, read_at: null, created_at: now() }).eq("id", row.id);
+  }
+  await sendPush(fresh, n);
+  if (n.mail) await sendMail(fresh, n);
+}
+async function memberIds(filter: (m: { id: string; title: string; is_admin: boolean }) => boolean, except?: string) {
+  const { data } = await supabase.from("members").select("id,title,is_admin").eq("status", "approved");
+  return (data ?? []).filter((m) => m.id !== except && filter(m as any)).map((m) => m.id);
+}
+const summaryOf = (d: Json) => String(d.summary ?? d.description ?? d.body ?? d.purpose ?? d.notes ?? d.content ?? "").replace(/\s+/g, " ").trim().slice(0, 140);
+const slot = (minutes: number) => Math.floor(Date.now() / (minutes * 60_000));
+// 모든 메뉴의 새 글·공개를 알림함으로 (카테고리 = kind)
+const BROADCAST: Record<string, { kind: string; emoji: string; label: string; link: string }> = {
+  events: { kind: "events", emoji: "🎉", label: "이벤트", link: "#events" },
+  marketing: { kind: "marketing", emoji: "🖼️", label: "마케팅 제작물", link: "#marketing" },
+  meetings: { kind: "meetings", emoji: "📝", label: "회의록", link: "#meetings" },
+  promotions: { kind: "promotions", emoji: "📣", label: "홍보", link: "#promotions" },
+};
+async function contentNotify(collection: string, id: string, prev: Json | undefined, next: Json, me: Member, role: Role) {
+  const who = `${me.campus === ALL_CAMPUS ? "이사" : me.campus} ${me.name}`;
+  const b = BROADCAST[collection];
+  if (b) {
+    const field = DRAFT_FIELD[collection];
+    const nowPublished = next[field] === "published" && (!prev || prev[field] !== "published");
+    if (nowPublished) {
+      const ids = await memberIds(() => true, me.id);
+      await notifyGrouped(ids, { kind: b.kind, title: `${b.emoji} 새 ${b.label} · ${String(next.title ?? "").slice(0, 60)}`, body: [shortCampus(next.branch), summaryOf(next)].filter(Boolean).join(" · ") || `${who}님이 올렸어요`, link: b.link, ref: `${collection}-${me.id}-${slot(10)}` });
+    } else if (!prev && role !== "admin" && collection === "promotions") {
+      await notifyGrouped(await adminIds(me.id), { kind: "promotions", title: `📣 홍보 기록 검토 요청 · ${String(next.title ?? "").slice(0, 60)}`, body: `${who} · 공개 전 검토해 주세요`, link: "#promotions", ref: `promo-review-${me.id}-${slot(30)}` });
+    }
+    return;
+  }
+  if (collection === "nationalNews" && !prev) {
+    const ids = await memberIds((m) => m.is_admin || isPrincipal(m.title), me.id);
+    const files = Array.isArray(next.files) ? next.files.length : 0;
+    const extra = [files ? `📎 첨부 ${files}개` : "", next.deadline ? `마감 ${String(next.deadline).slice(5).replace("-", "/")}` : ""].filter(Boolean).join(" · ");
+    await notifyGrouped(ids, { kind: "national", title: `📰 전국 소식 · ${String(next.title ?? "").slice(0, 70)}`, body: [summaryOf(next).slice(0, 110), extra].filter(Boolean).join(" · "), link: `#national?open=${id}`, ref: `national-${me.id}-${slot(10)}`, mail: true });
+    return;
+  }
+  if (collection === "complianceRequirements" && !prev) {
+    await notifyGrouped(await memberIds(() => true, me.id), { kind: "compliance", title: `✅ 연간 이수 항목 추가 · ${String(next.title ?? next.name ?? "").slice(0, 60)}`, body: summaryOf(next) || "이수 기한과 대상을 확인해 주세요", link: "#compliance", ref: `compreq-${me.id}-${slot(10)}` });
+    return;
+  }
+  if (collection === "complianceSubmissions" && !prev && role !== "admin") {
+    await notifyGrouped(await adminIds(me.id), { kind: "compliance", title: `📄 이수증이 제출됐어요`, body: `${who}${next.title || next.requirementTitle ? ` · ${next.title ?? next.requirementTitle}` : ""}`, link: "#compliance", ref: `compsub-${me.id}-${slot(30)}` });
+    return;
+  }
+  if (collection === "fund") {
+    const ids = await memberIds((m) => isPrincipal(m.title), me.id);
+    const amount = Number(next.income || 0) ? `입금 ${Number(next.income).toLocaleString("ko-KR")}원` : Number(next.expense || 0) ? `지출 ${Number(next.expense).toLocaleString("ko-KR")}원` : "";
+    await notifyGrouped(ids, { kind: "fund", title: prev ? "💰 제작실 기금 내역이 수정됐어요" : "💰 제작실 기금 내역이 추가됐어요", body: [who, next.description, amount].filter(Boolean).join(" · "), link: "#fund", ref: `fund-${me.id}-${slot(60)}` });
+  }
+}
 const shortCampus = (b: string) => String(b ?? "").replace("캠퍼스", "");
 const kstToday = () => new Date(Date.now() + 9 * 3600_000).toISOString().slice(0, 10);
 const addDays = (d: string, n: number) => new Date(new Date(d + "T00:00:00Z").getTime() + n * 86400_000).toISOString().slice(0, 10);
@@ -203,7 +267,7 @@ async function dailyCheck() {
   return count;
 }
 async function notifyList(me: Member) {
-  const { data: items } = await supabase.from("notifications").select("id,kind,title,body,link,created_at,read_at").eq("member_id", me.id).order("created_at", { ascending: false }).limit(40);
+  const { data: items } = await supabase.from("notifications").select("id,kind,title,body,link,created_at,read_at,count").eq("member_id", me.id).order("created_at", { ascending: false }).limit(80);
   const { count: unread } = await supabase.from("notifications").select("id", { count: "exact", head: true }).eq("member_id", me.id).is("read_at", null);
   const badges: Json = {};
   if (me.is_admin) {
@@ -395,6 +459,7 @@ async function dbWrite(op: string, body: Json, role: Role, principal: boolean, m
   if (JSON.stringify(next).length > 400_000) return json({ error: "기록이 너무 큽니다." }, 400);
   const { error } = await supabase.from("docs").upsert({ collection, id, data: next, updated_at: now() });
   if (error) throw error;
+  if (collection !== "productionRequests") background(contentNotify(collection, id, existing?.data as Json | undefined, next, me, role));
   if (collection === "productionRequests") {
     const prev = existing?.data as Json | undefined;
     if (!prev) {

@@ -1364,7 +1364,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             {(role === "admin" || (demoMode && section === "marketing")) && (section === "events" || section === "marketing" || section === "meetings") && <Button size="sm" className="rounded-xl" onClick={() => setEditorOpen(true)}><Plus className="size-4" />새 자료 등록</Button>}
             <Badge variant="secondary" className="hidden gap-1.5 rounded-full px-3 py-1.5 font-medium text-emerald-700 sm:inline-flex dark:text-emerald-300"><Archive className="size-3.5" />{demoMode ? "체험판" : "직원 전용"}</Badge>
-            {!demoMode && <NotificationCenter onBadges={setNavBadges} onOpenProfile={() => setProfileOpen(true)} onNavigate={(link) => { const next = hashToSection(link); if (next) changeSection(next); }} />}
+            {!demoMode && <NotificationCenter onBadges={setNavBadges} onOpenProfile={() => setProfileOpen(true)} onNavigate={(link) => { const openId = link.match(/open=([\w-]+)/)?.[1]; if (openId) { try { sessionStorage.setItem("archive-open", openId); } catch { /* 무시 */ } } const next = hashToSection(link); if (next) changeSection(next); if (openId) window.dispatchEvent(new CustomEvent("archive-open", { detail: openId })); }} />}
           </div>
         </header>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mail, Bell, BellOff, BellRing, CheckCheck, ClipboardList, LoaderCircle, Send, Share, Smartphone, UserPlus, AlarmClock } from "lucide-react";
+import { FileCheck2, LayoutGrid, Megaphone, Newspaper, NotebookTabs, PanelsTopLeft, WalletCards, Mail, Bell, BellOff, BellRing, CheckCheck, ClipboardList, LoaderCircle, Send, Share, Smartphone, UserPlus, AlarmClock } from "lucide-react";
 import { toast } from "sonner";
 
 import { notifyApi, type NotificationItem, type NotificationState } from "@/archive-api";
@@ -30,13 +30,28 @@ function ago(iso: string) {
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}일 전`;
   const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`;
 }
-const kindIcon: Record<string, typeof Bell> = { request: ClipboardList, member: UserPlus, deadline: AlarmClock, test: BellRing };
+const kindIcon: Record<string, typeof Bell> = { request: ClipboardList, member: UserPlus, deadline: AlarmClock, test: BellRing, national: Newspaper, meetings: NotebookTabs, events: LayoutGrid, promotions: Megaphone, marketing: PanelsTopLeft, compliance: FileCheck2, fund: WalletCards };
+// 알림함 카테고리 (알림 kind 묶음)
+const CATEGORIES: { key: string; label: string; kinds: string[] }[] = [
+  { key: "request", label: "제작 요청", kinds: ["request", "deadline"] },
+  { key: "national", label: "전국 소식", kinds: ["national"] },
+  { key: "meetings", label: "회의록", kinds: ["meetings"] },
+  { key: "events", label: "이벤트", kinds: ["events"] },
+  { key: "promotions", label: "홍보", kinds: ["promotions"] },
+  { key: "marketing", label: "마케팅", kinds: ["marketing"] },
+  { key: "compliance", label: "이수 관리", kinds: ["compliance"] },
+  { key: "fund", label: "기금", kinds: ["fund"] },
+  { key: "member", label: "회원", kinds: ["member"] },
+  { key: "etc", label: "기타", kinds: ["test"] },
+];
+const catOf = (kind: string) => CATEGORIES.find((c) => c.kinds.includes(kind))?.key ?? "etc";
 
 export function NotificationCenter({ onNavigate, onBadges, onOpenProfile }: { onNavigate: (link: string) => void; onBadges?: (badges: NotificationState["badges"]) => void; onOpenProfile?: () => void }) {
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<NotificationState | null>(null);
   const [push, setPush] = useState<PushState>("checking");
   const [busy, setBusy] = useState(false);
+  const [cat, setCat] = useState("all");
   const badgesRef = useRef(onBadges); badgesRef.current = onBadges;
   const navRef = useRef(onNavigate); navRef.current = onNavigate;
 
@@ -108,6 +123,9 @@ export function NotificationCenter({ onNavigate, onBadges, onOpenProfile }: { on
   }
 
   const unread = state?.unread ?? 0;
+  const items = state?.items ?? [];
+  const shown = cat === "all" ? items : items.filter((i) => catOf(i.kind) === cat);
+  const cats = CATEGORIES.map((c) => ({ ...c, total: items.filter((i) => catOf(i.kind) === c.key).length, unread: items.filter((i) => !i.read_at && catOf(i.kind) === c.key).length })).filter((c) => c.total > 0 || c.key === cat);
   return <>
     <Button type="button" variant="ghost" size="icon" className="relative size-9 rounded-xl" aria-label={`알림 ${unread}개`} onClick={() => setOpen(true)}>
       <Bell className="size-5" />
@@ -117,15 +135,17 @@ export function NotificationCenter({ onNavigate, onBadges, onOpenProfile }: { on
       <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-md">
         <SheetHeader className="border-b px-4 py-3 text-left">
           <div className="flex items-center justify-between gap-2 pr-8"><SheetTitle className="flex items-center gap-2"><Bell className="size-5" />알림</SheetTitle>{unread > 0 && <Button type="button" size="sm" variant="ghost" className="h-8 gap-1 text-muted-foreground" onClick={readAll}><CheckCheck className="size-4" />모두 읽음</Button>}</div>
-          <SheetDescription>제작 요청·승인·가입 신청 소식이 여기에 모여요.</SheetDescription>
+          <SheetDescription>모든 메뉴의 새 글과 업데이트가 여기에 모여요. 아래 칩으로 메뉴별로 골라 보세요.</SheetDescription>
         </SheetHeader>
 
         <div className="border-b p-4"><PushCard state={push} busy={busy} devices={state?.devices ?? 0} onEnable={enablePush} onDisable={disablePush} onTest={sendTest} />{onOpenProfile && <button type="button" onClick={() => { setOpen(false); onOpenProfile(); }} className="mt-2 flex w-full items-center justify-between rounded-xl border border-dashed px-3 py-2.5 text-left text-sm text-muted-foreground hover:bg-muted/40"><span className="flex items-center gap-2"><Mail className="size-4" />메일로도 받기 설정</span><span aria-hidden>›</span></button>}</div>
 
         <div className="flex-1 overflow-y-auto">
           {!state && <p className="p-8 text-center text-sm text-muted-foreground"><LoaderCircle className="mr-1 inline size-4 animate-spin" />불러오는 중…</p>}
-          {state && !state.items.length && <p className="p-10 text-center text-sm leading-6 text-muted-foreground">아직 알림이 없어요.<br />새 제작 요청이나 승인 소식이 생기면 알려드릴게요.</p>}
-          <ul className="divide-y">{state?.items.map((item) => {
+          {cats.length > 0 && <div className="sticky top-0 z-10 flex gap-1.5 overflow-x-auto border-b bg-background/95 px-4 py-2.5 backdrop-blur">{[{ key: "all", label: "전체", unread, total: items.length }, ...cats].map((c) => <button key={c.key} type="button" onClick={() => setCat(c.key)} className={`flex shrink-0 items-center gap-1 rounded-full border px-3 py-1.5 text-sm ${cat === c.key ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground"}`}>{c.label}{c.unread > 0 && <span className={`grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[11px] font-bold ${cat === c.key ? "bg-white text-primary" : "bg-rose-500 text-white"}`}>{c.unread}</span>}</button>)}</div>}
+          {state && items.length > 0 && !shown.length && <p className="p-10 text-center text-sm text-muted-foreground">이 분류에는 알림이 없어요.</p>}
+          {state && !state.items.length && <p className="p-10 text-center text-sm leading-6 text-muted-foreground">아직 알림이 없어요.<br />새 글·제작 요청·승인 소식이 생기면 메뉴별로 모아서 알려드릴게요.</p>}
+          <ul className="divide-y">{shown.map((item) => {
             const Icon = kindIcon[item.kind] ?? Bell;
             return <li key={item.id}><button type="button" onClick={() => openItem(item)} className={`flex w-full gap-3 px-4 py-3.5 text-left hover:bg-muted/40 ${item.read_at ? "" : "bg-primary/[0.04]"}`}>
               <span className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-full ${item.read_at ? "bg-muted text-muted-foreground" : "bg-primary text-primary-foreground"}`}><Icon className="size-4" /></span>
