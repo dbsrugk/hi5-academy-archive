@@ -96,6 +96,8 @@ import { ProductionRequestsSection } from "@/components/archive/production-reque
 import { PromotionsSection } from "@/components/archive/promotions-section";
 
 type Role = "staff" | "admin";
+const IDLE_KEY = "hi5-last-active";
+const IDLE_LIMIT = 30 * 60_000;
 type ArchiveSection = "events" | "marketing" | "meetings";
 type Section = ArchiveSection | "promotions" | "requests" | "fund" | "compliance" | "members" | "national";
 const SECTION_LABEL: Record<Section, string> = { events: "이벤트", promotions: "홍보", requests: "제작 요청", marketing: "마케팅 제작물", meetings: "회의록", compliance: "연간 이수 관리", fund: "제작실 기금", members: "회원 관리", national: "전국 Hi5 소식" };
@@ -1030,6 +1032,25 @@ export default function Home() {
   const [navBadges, setNavBadges] = useState<{ requests?: number; members?: number }>({});
   const [profileOpen, setProfileOpen] = useState(false);
 
+  // 보안: 30분 동안 아무 조작이 없으면 자동 로그아웃
+  useEffect(() => {
+    if (!role || demoMode) return;
+    const last = () => { try { return Number(sessionStorage.getItem(IDLE_KEY)) || 0; } catch { return 0; } };
+    const mark = () => { try { sessionStorage.setItem(IDLE_KEY, String(Date.now())); } catch { /* 무시 */ } };
+    const expire = () => void logout("30분 동안 사용하지 않아 자동으로 로그아웃됐어요. 다시 로그인해 주세요.");
+    if (last() && Date.now() - last() > IDLE_LIMIT) { expire(); return; }
+    mark();
+    let lastMark = Date.now();
+    const onActivity = () => { const now = Date.now(); if (now - lastMark > 10_000) { lastMark = now; mark(); } };
+    const check = () => { if (Date.now() - last() > IDLE_LIMIT) expire(); };
+    const events = ["pointerdown", "keydown", "wheel", "touchstart", "scroll"] as const;
+    events.forEach((e) => window.addEventListener(e, onActivity, { passive: true, capture: true }));
+    document.addEventListener("visibilitychange", check);
+    const timer = window.setInterval(check, 30_000);
+    return () => { events.forEach((e) => window.removeEventListener(e, onActivity, { capture: true })); document.removeEventListener("visibilitychange", check); window.clearInterval(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, demoMode]);
+
   useEffect(() => {
     fetch("/api/auth/session", { cache: "no-store" })
       .then(async (response) => (await response.json()) as { role?: Role | null; demo?: boolean })
@@ -1223,10 +1244,11 @@ export default function Home() {
     setSelectedTags([]);
   }
 
-  async function logout() {
+  async function logout(reason?: string) {
+    try { sessionStorage.removeItem(IDLE_KEY); } catch { /* 무시 */ }
     await fetch("/api/auth/logout", { method: "POST" });
     setRole(null);
-    toast.success("로그아웃되었습니다.");
+    if (reason) { try { sessionStorage.setItem("hi5-logout-reason", reason); } catch { /* 무시 */ } } else toast.success("로그아웃되었습니다.");
   }
 
   async function updateStatus(kind: ArchiveSection, id: string, status: PublishStatus) {
@@ -1352,7 +1374,7 @@ export default function Home() {
             {!demoMode && me && <Settings className="ml-auto size-4 shrink-0 text-sidebar-foreground/50 group-data-[collapsible=icon]:hidden" />}
           </button>
           <SidebarMenu>
-            <SidebarMenuItem><SidebarMenuButton tooltip="로그아웃" onClick={logout}><LogOut /><span>로그아웃</span></SidebarMenuButton></SidebarMenuItem>
+            <SidebarMenuItem><SidebarMenuButton tooltip="로그아웃" onClick={() => void logout()}><LogOut /><span>로그아웃</span></SidebarMenuButton></SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
       </Sidebar>

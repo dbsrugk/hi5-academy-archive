@@ -27,10 +27,12 @@ function payload(token: string | null): (Me & { exp: number }) | null {
 const tokenExpired = (token: string | null) => { const p = payload(token); return !p || p.exp * 1000 < Date.now(); };
 let currentMe: Me | null = null;
 export function getMe() { return currentMe; }
+// 보안: 로그인은 이 창(탭·앱)에서만 유지된다 — 닫으면 다시 로그인
+storage.set(TOKEN_KEY, null); // 예전 버전이 남긴 장기 로그인 지우기
 function saveToken(token: string | null) {
-  storage.set(TOKEN_KEY, token);
+  storage.set(TOKEN_KEY, token, true);
   const secure = location.protocol === "https:" ? "; Secure" : "";
-  document.cookie = token ? `${COOKIE}=${token}; Path=/; Max-Age=${60 * 60 * 24 * 14}; SameSite=Lax${secure}` : `${COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
+  document.cookie = token ? `${COOKIE}=${token}; Path=/; SameSite=Lax${secure}` : `${COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
 }
 function signOut() { saveToken(null); currentMe = null; currentRole = null; }
 
@@ -53,7 +55,7 @@ class ApiError extends Error { constructor(public status: number, message: strin
 
 // ---------- 서버 호출 ----------
 async function call(path: string, body: Json = {}) {
-  const token = storage.get(TOKEN_KEY);
+  const token = storage.get(TOKEN_KEY, true);
   const response = await fetchNative(`${FN}/${path}`, {
     method: "POST",
     headers: {
@@ -87,6 +89,40 @@ export const notifyApi = {
   unsubscribe: (endpoint: string) => call("push/unsubscribe", { endpoint }),
   test: () => call("push/test"),
 };
+// ---------- 지문(패스키) 로그인 ----------
+const PASSKEY_FLAG = "hi5-passkey-device";
+export const passkeyApi = {
+  supported: () => typeof window !== "undefined" && "PublicKeyCredential" in window && window.isSecureContext,
+  /** 이 기기에 등록돼 있는지 (기기별 표시용) */
+  onThisDevice: () => storage.get(PASSKEY_FLAG) === "1",
+  async login(): Promise<{ role: Role; me: Me }> {
+    const { startAuthentication } = await import("@simplewebauthn/browser");
+    const start = await call("passkey/login-options");
+    if (!start.ok) throw new Error(start.msg ?? "지문 로그인을 시작하지 못했어요.");
+    const response = await startAuthentication({ optionsJSON: start.options });
+    const data = await call("passkey/login-verify", { state: start.state, response });
+    if (!data.ok) throw new Error(data.msg ?? "지문을 확인하지 못했어요.");
+    saveToken(data.token); currentMe = data.me; currentRole = data.me.isAdmin ? "admin" : "staff";
+    storage.set(PASSKEY_FLAG, "1");
+    return { role: currentRole, me: currentMe! };
+  },
+  async register() {
+    const { startRegistration } = await import("@simplewebauthn/browser");
+    const start = await call("passkey/register-options");
+    if (!start.ok) throw new Error(start.msg ?? "등록을 시작하지 못했어요.");
+    const response = await startRegistration({ optionsJSON: start.options });
+    const ua = navigator.userAgent;
+    const device = /iPhone/.test(ua) ? "아이폰" : /iPad/.test(ua) ? "아이패드" : /Android/.test(ua) ? "안드로이드 휴대폰" : /Mac/.test(ua) ? "맥" : /Windows/.test(ua) ? "윈도우 PC" : "이 기기";
+    const data = await call("passkey/register-verify", { state: start.state, response, device });
+    if (!data.ok) throw new Error(data.msg ?? "등록하지 못했어요.");
+    storage.set(PASSKEY_FLAG, "1");
+  },
+  list: () => call("passkey/list") as Promise<{ items: { id: string; device: string | null; created_at: string; last_used_at: string | null }[] }>,
+  remove: async (id: string, thisDevice = false) => { await call("passkey/delete", { id }); if (thisDevice) storage.set(PASSKEY_FLAG, null); },
+  adminClear: (memberId: string) => call("admin/passkey-clear", { id: memberId }),
+  forgetDevice: () => storage.set(PASSKEY_FLAG, null),
+};
+
 export type Profile = { ok: boolean; msg?: string; email: string; emailOn: boolean; mailReady: boolean };
 export const profileApi = {
   get: () => call("me/profile") as Promise<Profile>,
@@ -514,16 +550,16 @@ async function route(method: string, path: string, params: URLSearchParams, init
       }
       if (id === "logout") { signOut(); return json({ ok: true }); }
       if (id === "session") {
-        if (tokenExpired(storage.get(TOKEN_KEY))) { signOut(); return json({ authenticated: false, role: null, demo: false }); }
+        if (tokenExpired(storage.get(TOKEN_KEY, true))) { signOut(); return json({ authenticated: false, role: null, demo: false }); }
         const data = await call("auth/session");
         if (!data.authenticated) { signOut(); return json({ authenticated: false, role: null, demo: false }); }
         currentMe = data.me; currentRole = data.role;
-        saveToken(storage.get(TOKEN_KEY));
+        saveToken(storage.get(TOKEN_KEY, true));
         return json(data);
       }
     }
     if (!currentRole) {
-      if (tokenExpired(storage.get(TOKEN_KEY))) return unauthorized();
+      if (tokenExpired(storage.get(TOKEN_KEY, true))) return unauthorized();
       const data = await call("auth/session");
       if (!data.authenticated) return unauthorized();
       currentMe = data.me; currentRole = data.role;

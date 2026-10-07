@@ -10,10 +10,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getMe } from "@/archive-api";
+import { getMe, passkeyApi } from "@/archive-api";
 import { CampusDot } from "@/lib/campus";
 
-type Member = { id: string; campus: string; title: string; name: string; status: "pending" | "approved" | "rejected" | "suspended"; is_admin: boolean; pledge_at: string | null; last_seen: string | null; created_at: string };
+type Member = { id: string; campus: string; title: string; name: string; status: "pending" | "approved" | "rejected" | "suspended"; is_admin: boolean; pledge_at: string | null; last_seen: string | null; created_at: string; passkeys?: number };
 type Log = { id: number; member_id: string | null; name: string | null; action: string; path: string | null; ip: string | null; at: string };
 
 const STATUS: Record<Member["status"], { label: string; tone: string }> = {
@@ -56,6 +56,12 @@ export function MembersSection() {
     try { await api("set", { id, ...patch }); toast.success("저장했습니다."); await load(); }
     catch (error) { toast.error(error instanceof Error ? error.message : "처리하지 못했어요."); }
   }
+  async function clearPasskeys(m: Member) {
+    if (confirmDelete !== "pk-" + m.id) { setConfirmDelete("pk-" + m.id); toast.info(`한 번 더 누르면 ${m.name} 선생님의 지문 로그인이 모두 해제돼요.`); return; }
+    setConfirmDelete("");
+    try { await passkeyApi.adminClear(m.id); toast.success("지문 로그인을 해제했어요. 다음엔 비밀번호로 로그인해야 해요."); await load(); }
+    catch (error) { toast.error(error instanceof Error ? error.message : "처리하지 못했어요."); }
+  }
   async function remove(id: string) {
     if (confirmDelete !== id) { setConfirmDelete(id); toast.info("한 번 더 누르면 삭제됩니다."); return; }
     setConfirmDelete("");
@@ -93,7 +99,7 @@ export function MembersSection() {
                 <TableRow key={m.id}>
                   <TableCell>{m.campus === "전체" ? <span className="whitespace-nowrap text-sm text-muted-foreground">전체 (이사)</span> : m.status === "approved" && !self ? <select value={m.campus} onChange={(event) => void update(m.id, { campus: event.target.value })} className="rounded-lg border bg-background px-2 py-1 text-sm" aria-label="캠퍼스">{["센텀", "김해", "명지"].map((c) => <option key={c}>{c}</option>)}</select> : <span className="inline-flex items-center gap-1.5 whitespace-nowrap"><CampusDot branch={m.campus} />{m.campus}</span>}</TableCell>
                   <TableCell>{m.status === "approved" && !self ? <select value={m.title} onChange={(event) => { const title = event.target.value; if (m.title === "이사" && title !== "이사") { void update(m.id, { campus: "센텀", title }); toast.info("캠퍼스가 센텀으로 지정됐어요. 맞지 않으면 캠퍼스 칸에서 바꿔 주세요."); } else void update(m.id, { title }); }} className="rounded-lg border bg-background px-2 py-1 text-sm" aria-label="직책">{["원장", "전임", "행정", "이사"].map((t) => <option key={t}>{t}</option>)}</select> : m.title}</TableCell>
-                  <TableCell className="whitespace-nowrap"><b>{m.name}</b>{m.is_admin && <Badge className="ml-1.5 rounded-full bg-brand-soft text-brand hover:bg-brand-soft">관리자</Badge>}{self && <span className="ml-1.5 text-xs text-muted-foreground">(나)</span>}</TableCell>
+                  <TableCell className="whitespace-nowrap"><b>{m.name}</b>{m.is_admin && <Badge className="ml-1.5 rounded-full bg-brand-soft text-brand hover:bg-brand-soft">관리자</Badge>}{self && <span className="ml-1.5 text-xs text-muted-foreground">(나)</span>}{!!m.passkeys && <span className="ml-1.5 text-xs text-muted-foreground" title="지문 로그인 등록 기기 수">👆{m.passkeys}</span>}</TableCell>
                   <TableCell className="whitespace-nowrap"><span className={`rounded-full px-2.5 py-1 text-xs font-medium ${STATUS[m.status].tone}`}>{STATUS[m.status].label}</span>{online(m.last_seen) && m.status === "approved" && <span className="ml-2 text-xs font-medium text-emerald-600">● 접속 중</span>}</TableCell>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{fmt(m.pledge_at)}</TableCell>
                   <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{fmt(m.last_seen)}</TableCell>
@@ -102,6 +108,7 @@ export function MembersSection() {
                     {m.status === "pending" && <Button size="sm" variant="outline" className="h-8 rounded-lg" onClick={() => void update(m.id, { status: "rejected" })}>거절</Button>}
                     {m.status === "approved" && !self && <Button size="sm" variant="outline" className="h-8 rounded-lg" onClick={() => void update(m.id, { status: "suspended" })}>정지</Button>}
                     {m.status === "approved" && !self && <Button size="sm" variant="outline" className="h-8 rounded-lg" onClick={() => void update(m.id, { is_admin: !m.is_admin })}>{m.is_admin ? "관리자 해제" : "관리자 지정"}</Button>}
+                    {!!m.passkeys && <Button size="sm" variant="ghost" className={`h-8 rounded-lg ${confirmDelete === "pk-" + m.id ? "bg-amber-100 text-amber-800" : ""}`} onClick={() => void clearPasskeys(m)}>지문 해제</Button>}
                     <Button size="sm" variant="ghost" className="h-8 rounded-lg" onClick={() => { setWho(m.id); setTab("logs"); }}>기록</Button>
                     {!self && m.status !== "approved" && <Button size="sm" variant="ghost" className={`h-8 rounded-lg text-destructive ${confirmDelete === m.id ? "bg-destructive/10" : ""}`} onClick={() => void remove(m.id)}>삭제</Button>}
                   </div></TableCell>

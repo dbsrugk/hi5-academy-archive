@@ -2,6 +2,7 @@
 // 역할: 교직원 가입 신청·승인·로그인, 컬렉션별 권한 확인, 파일 서명, 접속 기록, 관리자 회원 관리
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
+import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from "npm:@simplewebauthn/server@13.1.1";
 
 type Role = "staff" | "admin";
 type Json = Record<string, any>;
@@ -13,7 +14,7 @@ const CAMPUSES = ["센텀", "김해", "명지"];
 const TITLES = ["원장", "전임", "행정", "이사"];
 const ALL_CAMPUS = "전체"; // 이사는 특정 캠퍼스 소속이 아님
 const isPrincipal = (t: string) => t === "원장" || t === "이사";
-const SESSION_DAYS = 14;
+const SESSION_HOURS = 12; // 열 때마다 로그인 (화면에서 창을 닫으면 지워짐) + 최대 12시간
 const cors = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,OPTIONS",
@@ -46,7 +47,7 @@ async function hmac(msg: string) {
 const b64url = (s: string) => btoa(String.fromCharCode(...enc.encode(s))).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 const unb64url = (s: string) => new TextDecoder().decode(Uint8Array.from(atob(s.replaceAll("-", "+").replaceAll("_", "/")), (c) => c.charCodeAt(0)));
 async function issue(m: Member) {
-  const body = b64url(JSON.stringify({ id: m.id, c: m.campus, n: m.name, t: m.title, a: m.is_admin, exp: Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400 }));
+  const body = b64url(JSON.stringify({ id: m.id, c: m.campus, n: m.name, t: m.title, a: m.is_admin, exp: Math.floor(Date.now() / 1000) + SESSION_HOURS * 3600 }));
   return `${body}.${await hmac(body)}`;
 }
 async function readToken(token: string | null) {
@@ -317,11 +318,76 @@ async function login(body: Json, ip: string) {
   return json({ ok: true, token: await issue(m), me: meOf(m) });
 }
 
+// ---------- 지문(패스키) 로그인 ----------
+const PASSKEY_ORIGINS = ["https://hi5-academy-archive.vercel.app", "http://localhost:4177"];
+const b64u = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+const unb64u = (s: string) => Uint8Array.from(atob(s.replaceAll("-", "+").replaceAll("_", "/")), (c) => c.charCodeAt(0));
+function rpOf(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  if (!PASSKEY_ORIGINS.includes(origin)) return null;
+  return { origin, rpID: new URL(origin).hostname };
+}
+async function signState(state: Json) { const body = b64url(JSON.stringify({ ...state, exp: Date.now() + 5 * 60_000 })); return `${body}.${await hmac("pk:" + body)}`; }
+async function readState(token: unknown) {
+  const [body, sig] = String(token ?? "").split(".");
+  if (!body || !sig || (await hmac("pk:" + body)) !== sig) return null;
+  try { const s = JSON.parse(unb64url(body)); return s.exp > Date.now() ? s : null; } catch { return null; }
+}
+async function passkeyRegisterOptions(req: Request, me: Member) {
+  const rp = rpOf(req); if (!rp) return json({ ok: false, msg: "이 주소에서는 지문 로그인을 쓸 수 없어요." }, 400);
+  const { data: existing } = await supabase.from("passkeys").select("credential_id,transports").eq("member_id", me.id);
+  const options = await generateRegistrationOptions({
+    rpName: "하이파이브 아카이브", rpID: rp.rpID, userName: `${me.campus === ALL_CAMPUS ? "이사" : me.campus} ${me.name}`, userDisplayName: `${me.name} ${me.title}`,
+    userID: enc.encode(me.id), attestationType: "none",
+    excludeCredentials: (existing ?? []).map((c) => ({ id: c.credential_id, transports: c.transports as any })),
+    authenticatorSelection: { residentKey: "required", userVerification: "required" },
+  });
+  return json({ ok: true, options, state: await signState({ c: options.challenge, u: me.id, o: rp.origin }) });
+}
+async function passkeyRegisterVerify(req: Request, body: Json, me: Member, ip: string) {
+  const st = await readState(body.state); const rp = rpOf(req);
+  if (!st || st.u !== me.id || !rp || st.o !== rp.origin) return json({ ok: false, msg: "시간이 지났어요. 다시 시도해 주세요." });
+  try {
+    const v = await verifyRegistrationResponse({ response: body.response, expectedChallenge: st.c, expectedOrigin: rp.origin, expectedRPID: rp.rpID, requireUserVerification: true });
+    if (!v.verified || !v.registrationInfo) return json({ ok: false, msg: "등록을 확인하지 못했어요." });
+    const c = v.registrationInfo.credential;
+    const { error } = await supabase.from("passkeys").insert({ member_id: me.id, credential_id: c.id, public_key: b64u(c.publicKey), counter: c.counter, transports: c.transports ?? [], device: String(body.device ?? "").slice(0, 60) || null });
+    if (error) throw error;
+    await log(me, "passkey", "지문 로그인 등록", ip);
+    return json({ ok: true });
+  } catch (e) { console.error("[passkey]", e); return json({ ok: false, msg: "등록하지 못했어요. 다시 시도해 주세요." }); }
+}
+async function passkeyLoginOptions(req: Request) {
+  const rp = rpOf(req); if (!rp) return json({ ok: false, msg: "이 주소에서는 지문 로그인을 쓸 수 없어요." }, 400);
+  const options = await generateAuthenticationOptions({ rpID: rp.rpID, userVerification: "required", allowCredentials: [] });
+  return json({ ok: true, options, state: await signState({ c: options.challenge, o: rp.origin }) });
+}
+async function passkeyLoginVerify(req: Request, body: Json, ip: string) {
+  const st = await readState(body.state); const rp = rpOf(req);
+  if (!st || !rp || st.o !== rp.origin) return json({ ok: false, msg: "시간이 지났어요. 다시 눌러 주세요." });
+  const credId = String(body.response?.id ?? "");
+  const { data: pk } = await supabase.from("passkeys").select("id,member_id,public_key,counter,transports").eq("credential_id", credId).maybeSingle();
+  if (!pk) return json({ ok: false, msg: "등록되지 않은 지문이에요. 비밀번호로 로그인한 뒤 다시 등록해 주세요." });
+  try {
+    const v = await verifyAuthenticationResponse({ response: body.response, expectedChallenge: st.c, expectedOrigin: rp.origin, expectedRPID: rp.rpID, requireUserVerification: true, credential: { id: credId, publicKey: unb64u(pk.public_key), counter: Number(pk.counter), transports: pk.transports as any } });
+    if (!v.verified) return json({ ok: false, msg: "지문을 확인하지 못했어요." });
+    await supabase.from("passkeys").update({ counter: v.authenticationInfo.newCounter, last_used_at: now() }).eq("id", pk.id);
+  } catch (e) { console.error("[passkey]", e); return json({ ok: false, msg: "지문을 확인하지 못했어요." }); }
+  const { data: m } = await supabase.from("members").select("*").eq("id", pk.member_id).maybeSingle();
+  if (!m || m.status !== "approved") return json({ ok: false, msg: "사용할 수 없는 계정이에요. 관리자에게 문의해 주세요." });
+  await supabase.from("members").update({ failed_count: 0, locked_until: null, last_seen: now() }).eq("id", m.id);
+  memberCache.delete(m.id);
+  await log(m, "login", "지문", ip);
+  return json({ ok: true, token: await issue(m), me: meOf(m) });
+}
+
 // ---------- 관리자 ----------
 async function adminList() {
   const { data: members, error } = await supabase.from("members").select("id,campus,title,name,status,is_admin,pledge_at,last_seen,created_at,email,email_on").order("created_at", { ascending: false });
   if (error) throw error;
-  return json({ ok: true, members });
+  const { data: pks } = await supabase.from("passkeys").select("member_id");
+  const counts = new Map<string, number>(); for (const p of pks ?? []) counts.set(p.member_id, (counts.get(p.member_id) ?? 0) + 1);
+  return json({ ok: true, members: (members ?? []).map((m) => ({ ...m, passkeys: counts.get(m.id) ?? 0 })) });
 }
 // 접속 기록 검색: 검색어(이름·내용·IP) · 구분 · 캠퍼스 · 사람 · 기간 · 페이지
 async function adminLogs(body: Json) {
@@ -481,6 +547,8 @@ Deno.serve(async (req) => {
   try {
     if (path === "auth/apply") return await apply(body, ip);
     if (path === "auth/login") return await login(body, ip);
+    if (path === "passkey/login-options") return await passkeyLoginOptions(req);
+    if (path === "passkey/login-verify") return await passkeyLoginVerify(req, body, ip);
     if (path === "cron/daily") {
       const secret = (await config()).cron_secret;
       if (!secret || req.headers.get("x-cron-secret") !== secret) return json({ error: "forbidden" }, 403);
@@ -496,6 +564,23 @@ Deno.serve(async (req) => {
     if (path === "ping") {
       await supabase.from("members").update({ last_seen: now() }).eq("id", me.id);
       if (body.path) await log(me, body.kind === "open" ? "open" : "view", String(body.path), ip);
+      return json({ ok: true });
+    }
+
+    if (path === "passkey/register-options") return await passkeyRegisterOptions(req, me);
+    if (path === "passkey/register-verify") return await passkeyRegisterVerify(req, body, me, ip);
+    if (path === "passkey/list") {
+      const { data } = await supabase.from("passkeys").select("id,device,created_at,last_used_at").eq("member_id", me.id).order("created_at", { ascending: false });
+      return json({ ok: true, items: data ?? [] });
+    }
+    if (path === "passkey/delete") {
+      await supabase.from("passkeys").delete().eq("member_id", me.id).eq("id", String(body.id ?? ""));
+      return json({ ok: true });
+    }
+    if (path === "admin/passkey-clear") {
+      if (!me.is_admin) return json({ ok: false, msg: "관리자만 사용할 수 있어요." }, 403);
+      await supabase.from("passkeys").delete().eq("member_id", String(body.id ?? ""));
+      await log(me, "admin", `지문 로그인 해제 ${String(body.id ?? "").slice(0, 8)}`, ip);
       return json({ ok: true });
     }
 
