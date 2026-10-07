@@ -23,7 +23,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const now = () => new Date().toISOString();
 
 // 컬렉션 규칙
-const COLLECTIONS = new Set(["events", "marketing", "meetings", "promotions", "productionRequests", "productionSchedules", "productionPriority", "complianceRequirements", "complianceSubmissions", "complianceLogs", "fund"]);
+const COLLECTIONS = new Set(["events", "marketing", "meetings", "promotions", "productionRequests", "productionSchedules", "productionPriority", "complianceRequirements", "complianceSubmissions", "complianceLogs", "fund", "nationalNews"]);
 const STAFF_CREATE = new Set(["promotions", "productionRequests", "complianceSubmissions", "complianceLogs"]);
 const ADMIN_READ = new Set(["complianceLogs"]);
 const DRAFT_FIELD: Record<string, string> = { events: "status", marketing: "status", meetings: "status", promotions: "visibility" };
@@ -342,6 +342,7 @@ async function signRead(keys: unknown) {
 // 제작실 기금은 직책이 '원장'인 회원만
 function canRead(collection: string, role: Role, principal: boolean) {
   if (collection === "fund") return principal;
+  if (collection === "nationalNews") return principal || role === "admin"; // 전국 Hi5 소식: 원장·이사·관리자
   if (ADMIN_READ.has(collection)) return role === "admin";
   return true;
 }
