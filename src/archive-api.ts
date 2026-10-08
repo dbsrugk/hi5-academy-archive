@@ -704,8 +704,19 @@ async function route(method: string, path: string, params: URLSearchParams, init
       if (id && method === "PATCH") { await updateDoc("productionSchedules", id, { ...data, updatedAt: at }); return json({ id, ...data }); }
     }
 
+    // 제작실 주간 운영표 (요일별 고정 + 날짜별 예외) — 보기는 모두, 수정은 관리자·제작실장
+    if (head === "production-weekly") {
+      if (method === "GET") { const d = await getDoc("productionPriority", "weekly-plan"); return json({ plan: d ? { days: d.days ?? {}, exceptions: d.exceptions ?? {}, updatedAt: d.updatedAt ?? "", updatedBy: d.updatedBy ?? "" } : { days: {}, exceptions: {} } }); }
+      if (prodRole !== "admin") return forbidden();
+      const b = await readBody();
+      const days = Object.fromEntries(["0", "1", "2", "3", "4", "5", "6"].map((k) => [k, str(b.days?.[k], 40)]).filter(([, v]) => v));
+      const exceptions = Object.fromEntries(Object.entries(b.exceptions ?? {}).filter(([k]) => /^\d{4}-\d{2}-\d{2}$/.test(k)).slice(0, 200).map(([k, v]) => [k, str(v, 40)]).filter(([, v]) => v));
+      const plan = { days, exceptions, updatedAt: now(), updatedBy: whoAmI() };
+      await setDoc("productionPriority", "weekly-plan", plan);
+      return json({ plan });
+    }
     if (head === "production-priority") {
-      if (method === "GET") return json({ overrides: (await all("productionPriority")).map((o) => ({ monthKey: o.id, branch: o.branch, updatedAt: o.updatedAt })).sort((a, b) => a.monthKey.localeCompare(b.monthKey)) });
+      if (method === "GET") return json({ overrides: (await all("productionPriority")).filter((o) => /^\d{4}-\d{2}$/.test(String(o.id))).map((o) => ({ monthKey: o.id, branch: o.branch, updatedAt: o.updatedAt })).sort((a, b) => a.monthKey.localeCompare(b.monthKey)) });
       if (prodRole !== "admin") return forbidden();
       const b = await readBody();
       if (!/^\d{4}-\d{2}$/.test(String(b.monthKey)) || !["김해캠퍼스", "센텀캠퍼스", "명지캠퍼스"].includes(b.branch)) return bad("월과 캠퍼스를 확인해 주세요.");

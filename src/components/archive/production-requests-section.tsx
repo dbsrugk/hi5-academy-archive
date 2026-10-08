@@ -36,6 +36,14 @@ type ProductionSchedule = {
   notes: string; delayedReason: string; revisedDueDate: string; linkedRequestId: string | null; demo?: boolean;
 };
 type PriorityOverride = { monthKey: string; branch: string };
+type WeeklyPlan = { days: Record<string, string>; exceptions: Record<string, string>; updatedAt?: string; updatedBy?: string };
+const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
+/** 그날 제작실 일정: 날짜 예외가 있으면 그것, 없으면 요일 고정 */
+function planFor(plan: WeeklyPlan, date: string) {
+  if (!date) return "";
+  if (plan.exceptions[date] !== undefined) return plan.exceptions[date];
+  return plan.days[String(new Date(date + "T00:00:00").getDay())] ?? "";
+}
 type StatusFilter = "open" | "all" | RequestStatus;
 
 const campuses = ["김해캠퍼스", "센텀캠퍼스", "명지캠퍼스", "공동"] as const; // 공동 = 여러 캠퍼스가 함께 쓰는 작업물
@@ -112,6 +120,9 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
   const [managed, setManaged] = useState<ProductionRequest | null>(null);
   const [scheduleDraft, setScheduleDraft] = useState<ProductionSchedule | null>(null);
   const [completing, setCompleting] = useState<ProductionRequest | null>(null);
+  const [plan, setPlan] = useState<WeeklyPlan>({ days: {}, exceptions: {} });
+  const [planOpen, setPlanOpen] = useState(false);
+  const [dueDraft, setDueDraft] = useState("");
   const canManage = role === "admin" || getMe()?.title === "제작실장" || demoMode;
   const selectedMonthKey = monthKey(monthCursor);
   const currentPriority = overrides.find((item) => item.monthKey === selectedMonthKey)?.branch ?? defaultPriority(selectedMonthKey);
@@ -122,7 +133,9 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
       fetch("/api/production-requests", { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ requests?: ProductionRequest[] }> : { requests: [] }),
       fetch("/api/production-schedules", { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ schedules?: ProductionSchedule[] }> : { schedules: [] }),
       fetch("/api/production-priority", { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ overrides?: PriorityOverride[] }> : { overrides: [] }),
-    ]).then(([requestData, scheduleData, priorityData]) => {
+      fetch("/api/production-weekly", { cache: "no-store" }).then((response) => response.ok ? response.json() as Promise<{ plan?: WeeklyPlan }> : { plan: undefined }).catch(() => ({ plan: undefined })),
+    ]).then(([requestData, scheduleData, priorityData, weeklyData]) => {
+      if (weeklyData.plan) setPlan({ days: weeklyData.plan.days ?? {}, exceptions: weeklyData.plan.exceptions ?? {}, updatedAt: weeklyData.plan.updatedAt, updatedBy: weeklyData.plan.updatedBy });
       setRequests(requestData.requests ?? []);
       setSchedules(scheduleData.schedules ?? []);
       setOverrides(priorityData.overrides ?? []);
@@ -195,7 +208,7 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
         if (!response.ok || !data.id) throw new Error(data.error ?? "요청을 등록하지 못했습니다.");
         setRequests((current) => [{ id: data.id!, ...base, ...fresh, updatedAt: new Date().toISOString(), referenceImages: references.map((image) => ({ src: fileUrl(image.key) ?? "", name: image.name })), refAssets }, ...current]);
       }
-      setFormOpen(false); setFiles([]); setPicked([]); setStatusFilter("open"); toast.success("제작 요청을 등록했습니다. 관리자가 확인 후 승인합니다.");
+      setFormOpen(false); setFiles([]); setPicked([]); setDueDraft(""); setStatusFilter("open"); toast.success("제작 요청을 등록했습니다. 관리자가 확인 후 승인합니다.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "요청을 등록하지 못했습니다."); }
     finally { setSaving(false); }
   }
@@ -305,6 +318,21 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
     finally { setSaving(false); }
   }
 
+  async function savePlan(next: WeeklyPlan) {
+    if (!canManage) return;
+    setSaving(true);
+    try {
+      if (!demoMode) {
+        const response = await fetch("/api/production-weekly", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(next) });
+        const data = await response.json().catch(() => ({})) as { plan?: WeeklyPlan; error?: string };
+        if (!response.ok || !data.plan) throw new Error(data.error ?? "운영표를 저장하지 못했어요.");
+        setPlan(data.plan);
+      } else setPlan(next);
+      setPlanOpen(false); toast.success("제작실 운영표를 저장했어요. 모두에게 보여요.");
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setSaving(false); }
+  }
+
   async function savePriority(branch: string) {
     if (!canManage) return;
     const next = [...overrides.filter((item) => item.monthKey !== selectedMonthKey), { monthKey: selectedMonthKey, branch }];
@@ -340,6 +368,8 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
     </div>
     {demoMode && <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-800">체험판에서는 일정과 진행 상태를 직접 시험할 수 있으며 새로고침하면 초기화됩니다.</div>}
 
+    <WeeklyStrip plan={plan} canManage={canManage} onEdit={() => setPlanOpen(true)} />
+
     {/* 상태판 */}
     <Card className="rounded-2xl py-0"><CardContent className="space-y-4 p-4 md:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -364,7 +394,7 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
       </div>
     </CardContent></Card>
 
-    <ProductionScheduleView monthCursor={monthCursor} setMonthCursor={setMonthCursor} selectedDate={selectedDate} setSelectedDate={setSelectedDate} schedules={schedules.filter((item) => item.status !== "completed")} requests={requests.filter((item) => isOpen(item.status))} priority={currentPriority} canManage={canManage} onPriority={savePriority} onOpenSchedule={(item) => setScheduleDraft({ ...item })} onOpenRequest={(item) => setManaged({ ...item })} onNewSchedule={openNewSchedule} />
+    <ProductionScheduleView monthCursor={monthCursor} setMonthCursor={setMonthCursor} selectedDate={selectedDate} setSelectedDate={setSelectedDate} schedules={schedules.filter((item) => item.status !== "completed")} requests={requests.filter((item) => isOpen(item.status))} plan={plan} priority={currentPriority} canManage={canManage} onPriority={savePriority} onOpenSchedule={(item) => setScheduleDraft({ ...item })} onOpenRequest={(item) => setManaged({ ...item })} onNewSchedule={openNewSchedule} />
 
     {/* 캠퍼스별 현황 */}
     <Card className="rounded-2xl py-0"><CardContent className="p-4 md:p-5">
@@ -388,7 +418,7 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
           <RequestSelect label="캠퍼스" name="branch" items={campuses.map((value) => [value, value === "공동" ? "공동 작업 (여러 캠퍼스)" : value])} defaultValue={myCampus()} />
           <RequestField label="요청자" name="requester" defaultValue={myName()} placeholder="원장명 또는 담당자" required />
           <RequestField label="제작물 종류" name="assetType" placeholder="현수막, 배너, 카드뉴스" required />
-          <RequestField label="희망 완료일" name="desiredDate" type="date" min={todayStr()} required />
+          <div className="space-y-2"><RequestField label="희망 완료일" name="desiredDate" type="date" min={todayStr()} required onChange={(e) => setDueDraft(e.target.value)} />{dueDraft && planFor(plan, dueDraft) && <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs leading-5 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">📌 이 날 제작실은 <b>{planFor(plan, dueDraft)}</b> 일정이에요. 다른 작업은 하루 이틀 늦어질 수 있어요.</p>}</div>
           <RequestField label="규격·수량" name="specifications" placeholder="예: A2 2장 / 1080×1350px" />
         </div>
         <RequestText label="사용 목적과 채널" name="purpose" placeholder="예: 인스타그램 피드 + 원내 게시" />
@@ -409,6 +439,7 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
     <MarketingPicker open={pickerOpen} onOpenChange={setPickerOpen} max={Math.max(0, 10 - files.length)} picked={picked} onDone={setPicked} />
     <RequestDialog item={managed} setItem={setManaged} canManage={canManage} saving={saving} onSave={saveWorkflow} onDelete={deleteRequest} onOpenMarketing={onOpenMarketing} onEditOwn={editOwn} onAddProgress={addProgress} onComplete={(item) => setCompleting(item)} />
     <ScheduleDialog item={scheduleDraft} setItem={setScheduleDraft} canManage={canManage} saving={saving} onSave={saveSchedule} onDelete={deleteSchedule} exists={!!scheduleDraft && schedules.some((s) => s.id === scheduleDraft.id)} />
+    <WeeklyPlanDialog open={planOpen} onOpenChange={setPlanOpen} plan={plan} saving={saving} onSave={savePlan} />
     <CompleteDialog item={completing} onClose={() => setCompleting(null)} onDone={(updated, assetId) => {
       setRequests((current) => current.map((item) => item.id === updated.id ? updated : item));
       setSchedules((items) => items.map((s) => s.linkedRequestId === updated.id ? { ...s, status: "completed" } : s));
@@ -435,7 +466,7 @@ function RequestRow({ item, onOpen }: { item: ProductionRequest; onOpen: () => v
   </button>;
 }
 
-function ProductionScheduleView({ monthCursor, setMonthCursor, selectedDate, setSelectedDate, schedules, requests, priority, canManage, onPriority, onOpenSchedule, onOpenRequest, onNewSchedule }: { monthCursor: Date; setMonthCursor: React.Dispatch<React.SetStateAction<Date>>; selectedDate: string; setSelectedDate: (date: string) => void; schedules: ProductionSchedule[]; requests: ProductionRequest[]; priority: string; canManage: boolean; onPriority: (branch: string) => void; onOpenSchedule: (item: ProductionSchedule) => void; onOpenRequest: (item: ProductionRequest) => void; onNewSchedule: (date: string) => void }) {
+function ProductionScheduleView({ monthCursor, setMonthCursor, selectedDate, setSelectedDate, schedules, requests, plan, priority, canManage, onPriority, onOpenSchedule, onOpenRequest, onNewSchedule }: { monthCursor: Date; setMonthCursor: React.Dispatch<React.SetStateAction<Date>>; selectedDate: string; setSelectedDate: (date: string) => void; schedules: ProductionSchedule[]; requests: ProductionRequest[]; plan: WeeklyPlan; priority: string; canManage: boolean; onPriority: (branch: string) => void; onOpenSchedule: (item: ProductionSchedule) => void; onOpenRequest: (item: ProductionRequest) => void; onNewSchedule: (date: string) => void }) {
   const year = monthCursor.getFullYear(); const month = monthCursor.getMonth() + 1; const key = monthKey(monthCursor);
   const firstDay = new Date(year, month - 1, 1).getDay(); const lastDate = new Date(year, month, 0).getDate();
   const rawDays = Array.from({ length: firstDay + lastDate }, (_, index) => index < firstDay ? null : index - firstDay + 1);
@@ -449,7 +480,7 @@ function ProductionScheduleView({ monthCursor, setMonthCursor, selectedDate, set
   const [sy, sm, sd] = selectedDate.split("-").map(Number);
   return <Card className="overflow-hidden rounded-2xl py-0"><CardContent className="p-4 md:p-5">
     <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div><div className="flex items-center gap-2"><CalendarDays className="size-5 text-primary" /><h2 className="font-semibold">주요 일정</h2></div><p className="mt-1 text-sm text-muted-foreground">날짜를 누르면 그날 일정과 마감 요청을 아래에서 볼 수 있어요. 완료된 건은 달력에서 빠지고 '완료' 목록에 남아요.{canManage ? " 일정을 누르면 수정·삭제할 수 있어요." : ""}</p></div>
+      <div><div className="flex items-center gap-2"><CalendarDays className="size-5 text-primary" /><h2 className="font-semibold">주요 일정</h2></div><p className="mt-1 text-sm text-muted-foreground">{canManage ? "달력의 일정을 누르면 바로 수정·삭제, 빈 날짜를 누르면 바로 일정 추가가 돼요." : "날짜를 누르면 그날 일정과 마감 요청을 아래에서 볼 수 있어요."} 완료된 건은 달력에서 빠지고 '완료' 목록에 남아요.</p></div>
       <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/35 px-3 py-2"><span className="text-sm text-muted-foreground">이번 달 우선 캠퍼스</span>{canManage ? <Select value={priority} onValueChange={onPriority}><SelectTrigger className="h-8 w-24 bg-background"><SelectValue /></SelectTrigger><SelectContent>{ROTATION.map((campus) => <SelectItem key={campus} value={campus}>{short[campus]}</SelectItem>)}</SelectContent></Select> : <Badge>{short[priority]}</Badge>}<span className="flex items-center gap-1.5 text-xs text-muted-foreground"><CampusDot branch="김해" />김해→<CampusDot branch="센텀" />센텀→<CampusDot branch="명지" />명지 순환</span></div>
     </div>
     <Tabs defaultValue="monthly"><TabsList><TabsTrigger value="monthly">월간</TabsTrigger><TabsTrigger value="annual">연간</TabsTrigger></TabsList>
@@ -462,14 +493,18 @@ function ProductionScheduleView({ monthCursor, setMonthCursor, selectedDate, set
             const ds = day ? monthSchedules.filter((item) => item.scheduleDate === date) : [];
             const dr = day ? requests.filter((item) => effectiveDue(item) === date) : [];
             const selected = date === selectedDate;
-            return <div key={`${day ?? "empty"}-${index}`} role={day ? "button" : undefined} tabIndex={day ? 0 : -1} aria-label={day ? `${month}월 ${day}일 일정 ${ds.length + dr.length}건` : undefined} onClick={() => day && setSelectedDate(date)} onKeyDown={(event) => { if (day && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); setSelectedDate(date); } }} className={`flex min-h-14 min-w-0 cursor-pointer flex-col items-stretch justify-start border-b border-r p-1 text-left md:min-h-24 md:p-1.5 ${day ? (selected ? "bg-primary/8 ring-2 ring-inset ring-primary/40" : "bg-card hover:bg-muted/30") : "pointer-events-none bg-muted/15"} ${index % 7 === 6 ? "border-r-0" : ""}`}>
+            const focus = planFor(plan, date);
+            const pick = () => { if (!day) return; setSelectedDate(date); if (canManage && !ds.length && !dr.length) onNewSchedule(date); };
+            return <div key={`${day ?? "empty"}-${index}`} role={day ? "button" : undefined} tabIndex={day ? 0 : -1} aria-label={day ? `${month}월 ${day}일 일정 ${ds.length + dr.length}건${focus ? ` · 제작실 ${focus}` : ""}` : undefined} title={focus ? `제작실: ${focus}` : undefined} onClick={pick} onKeyDown={(event) => { if (day && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); pick(); } }} className={`flex min-h-14 min-w-0 cursor-pointer flex-col items-stretch justify-start border-b border-r p-1 text-left md:min-h-24 md:p-1.5 ${day ? (selected ? "bg-primary/8 ring-2 ring-inset ring-primary/40" : "bg-card hover:bg-muted/30") : "pointer-events-none bg-muted/15"} ${index % 7 === 6 ? "border-r-0" : ""} ${focus ? "border-t-2 border-t-amber-300 dark:border-t-amber-700" : ""}`}>
               {day && <span className={`inline-grid size-6 shrink-0 place-items-center self-center rounded-full text-xs font-semibold md:self-start ${date === todayKey ? "bg-brand text-white" : index % 7 === 0 ? "text-brand" : index % 7 === 6 ? "text-[#2f6fdb]" : "text-foreground"}`}>{day}</span>}
+              {/* 제작실 운영표 꼬리표 */}
+              {day && focus && <span className="mt-0.5 hidden truncate rounded bg-amber-100/80 px-1 text-[10px] leading-4 font-medium text-amber-900 md:block dark:bg-amber-900/40 dark:text-amber-100">📌 {focus}</span>}
               {/* 휴대폰: 점만 */}
               {(ds.length + dr.length > 0) && <span className="mt-1 flex flex-wrap justify-center gap-0.5 md:hidden">{[...ds.map((item) => ({ id: item.id, color: campusColor(item.branch), square: true })), ...dr.map((item) => ({ id: item.id, color: campusColor(item.branch), square: false }))].slice(0, 4).map((dot) => <span key={dot.id} className={`size-1.5 ${dot.square ? "rounded-[1px]" : "rounded-full"}`} style={{ background: dot.color }} />)}</span>}
               {/* PC: 제목 */}
               <span className="hidden md:block">
-                {ds.slice(0, 2).map((item) => <span key={item.id} className={`mt-1 block truncate rounded border-l-[3px] px-1.5 py-0.5 text-xs leading-4 ${statusTone[item.status]}`} style={{ borderLeftColor: campusColor(item.branch) }}>{item.title}</span>)}
-                {dr.slice(0, 1).map((item) => <span key={item.id} className="mt-1 block truncate rounded border-l-[3px] bg-brand-soft px-1.5 py-0.5 text-xs leading-4 text-foreground" style={{ borderLeftColor: campusColor(item.branch) }}>요청 · {item.title}</span>)}
+                {ds.slice(0, 2).map((item) => <button key={item.id} type="button" onClick={(event) => { event.stopPropagation(); setSelectedDate(date); onOpenSchedule({ ...item }); }} className={`mt-1 block w-full truncate rounded border-l-[3px] px-1.5 py-0.5 text-left text-xs leading-4 hover:brightness-95 ${statusTone[item.status]}`} style={{ borderLeftColor: campusColor(item.branch) }} title={canManage ? "눌러서 수정" : item.title}>{item.title}</button>)}
+                {dr.slice(0, 1).map((item) => <button key={item.id} type="button" onClick={(event) => { event.stopPropagation(); setSelectedDate(date); onOpenRequest({ ...item }); }} className="mt-1 block w-full truncate rounded border-l-[3px] bg-brand-soft px-1.5 py-0.5 text-left text-xs leading-4 text-foreground hover:brightness-95" style={{ borderLeftColor: campusColor(item.branch) }}>요청 · {item.title}</button>)}
                 {ds.length + dr.length > 3 && <span className="mt-1 block text-[11px]">외 {ds.length + dr.length - 3}건</span>}
               </span>
             </div>;
@@ -478,6 +513,7 @@ function ProductionScheduleView({ monthCursor, setMonthCursor, selectedDate, set
         {/* 선택한 날 목록 */}
         <div className="mt-3 rounded-xl border bg-muted/20 p-3">
           <div className="mb-2 flex items-center justify-between gap-2"><b className="text-sm">{sm}월 {sd}일{sy !== year ? ` (${sy})` : ""} · {daySchedules.length + dayRequests.length}건</b>{canManage && <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg" onClick={() => onNewSchedule(selectedDate)}><Plus className="size-3.5" />일정 추가</Button>}</div>
+          {planFor(plan, selectedDate) && <p className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">📌 제작실: <b>{planFor(plan, selectedDate)}</b></p>}
           {!daySchedules.length && !dayRequests.length && <p className="py-3 text-center text-sm text-muted-foreground">이 날은 일정이나 마감 요청이 없어요.</p>}
           <div className="space-y-1.5">
             {daySchedules.map((item) => <button key={item.id} type="button" onClick={() => onOpenSchedule(item)} className="flex w-full items-center gap-2.5 rounded-lg border-l-4 bg-card px-3 py-2.5 text-left shadow-xs" style={{ borderLeftColor: campusColor(item.branch) }}><CalendarDays className="size-4 shrink-0 text-muted-foreground" /><span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{item.title}</span><span className="block truncate text-xs text-muted-foreground">일정 · {short[item.branch] ?? item.branch} · {item.assetType || "제작물 미정"}</span></span><Badge className={statusTone[item.status]}>{statusLabels[item.status]}</Badge></button>)}
@@ -653,6 +689,44 @@ function CompleteDialog({ item, onClose, onDone }: { item: ProductionRequest | n
       <Button variant="outline" className="h-11 sm:h-10" disabled={!!busy} onClick={onClose}>취소</Button>
       <Button className="h-11 sm:h-10" disabled={!!busy} onClick={() => void submit()}>{busy ? <LoaderCircle className="animate-spin" /> : <CheckCircle2 />}{busy === "upload" ? "이미지 올리는 중…" : busy === "save" ? (toDrive ? "드라이브에 저장 중… (최대 1분)" : "저장 중…") : "완료 처리"}</Button>
     </DialogFooter>
+  </DialogContent></Dialog>;
+}
+
+/** 이번 주 제작실 일정 띠 (월~일) */
+function WeeklyStrip({ plan, canManage, onEdit }: { plan: WeeklyPlan; canManage: boolean; onEdit: () => void }) {
+  const today = new Date(todayStr() + "T00:00:00");
+  const monday = new Date(today); monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(monday); d.setDate(monday.getDate() + i); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; return { key, d }; });
+  const empty = !Object.keys(plan.days).length && !Object.keys(plan.exceptions).length;
+  if (empty && !canManage) return null;
+  return <Card className="rounded-2xl py-0"><CardContent className="p-4 md:p-5">
+    <div className="mb-3 flex items-center justify-between gap-2">
+      <div><h2 className="font-semibold">📌 이번 주 제작실 일정</h2><p className="mt-0.5 text-xs text-muted-foreground">{empty ? "제작실장이 요일별 작업을 적어 두면 모두에게 보여요." : `요청 마감일을 정할 때 참고해 주세요.${plan.updatedBy ? ` · ${plan.updatedBy} 수정` : ""}`}</p></div>
+      {canManage && <Button type="button" variant="outline" size="sm" className="h-9 shrink-0 rounded-lg" onClick={onEdit}><Pencil className="size-3.5" />운영표 편집</Button>}
+    </div>
+    <div className="-mx-1 grid grid-flow-col auto-cols-[minmax(84px,1fr)] gap-1.5 overflow-x-auto px-1 pb-1">{week.map(({ key, d }) => { const text = planFor(plan, key); const isToday = key === todayStr(); const special = plan.exceptions[key] !== undefined; return <div key={key} className={`rounded-xl border p-2 ${isToday ? "border-primary bg-primary/5" : ""} ${text ? "" : "opacity-70"}`}>
+      <p className={`text-xs font-semibold ${d.getDay() === 0 ? "text-brand" : d.getDay() === 6 ? "text-[#2f6fdb]" : "text-muted-foreground"}`}>{WEEKDAYS[d.getDay()]} {d.getMonth() + 1}/{d.getDate()}{isToday && <span className="ml-1 text-primary">오늘</span>}</p>
+      <p className={`mt-1 text-[13px] leading-5 font-medium break-keep ${text ? "text-foreground" : "text-muted-foreground"}`}>{text || "—"}</p>
+      {special && <span className="mt-1 inline-block rounded bg-amber-100 px-1 text-[10px] text-amber-900 dark:bg-amber-900/40 dark:text-amber-100">이 날만</span>}
+    </div>; })}</div>
+  </CardContent></Card>;
+}
+
+function WeeklyPlanDialog({ open, onOpenChange, plan, saving, onSave }: { open: boolean; onOpenChange: (v: boolean) => void; plan: WeeklyPlan; saving: boolean; onSave: (plan: WeeklyPlan) => void }) {
+  const [days, setDays] = useState<Record<string, string>>({});
+  const [exceptions, setExceptions] = useState<[string, string][]>([]);
+  const [newDate, setNewDate] = useState(""); const [newText, setNewText] = useState("");
+  useEffect(() => { if (!open) return; setDays({ ...plan.days }); setExceptions(Object.entries(plan.exceptions).filter(([d]) => d >= todayStr()).sort()); setNewDate(""); setNewText(""); }, [open]);
+  const order = ["1", "2", "3", "4", "5", "6", "0"];
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
+    <DialogHeader className="text-left"><DialogTitle>제작실 주간 운영표</DialogTitle><DialogDescription>요일마다 주로 하는 작업을 적어 주세요. 달력과 요청서에 모두에게 표시돼요. 비워 두면 표시하지 않아요.</DialogDescription></DialogHeader>
+    <div className="space-y-2">{order.map((k) => <div key={k} className="flex items-center gap-2"><span className={`w-8 shrink-0 text-center text-sm font-semibold ${k === "0" ? "text-brand" : k === "6" ? "text-[#2f6fdb]" : ""}`}>{WEEKDAYS[Number(k)]}</span><Input value={days[k] ?? ""} maxLength={40} onChange={(e) => setDays({ ...days, [k]: e.target.value })} placeholder={k === "5" || k === "6" ? "예: 노트 제작 위주" : k === "0" ? "예: 휴무" : "예: 현수막·배너 작업"} className="h-11 rounded-xl sm:h-10" /></div>)}</div>
+    <div className="space-y-2 rounded-xl border p-3">
+      <p className="text-sm font-semibold">특정 날짜만 다르게 <span className="font-normal text-muted-foreground">(예: 출장, 휴무)</span></p>
+      {exceptions.map(([d, t], i) => <div key={d} className="flex items-center gap-2 text-sm"><span className="w-24 shrink-0 tabular-nums">{dotted(d).slice(5)} ({WEEKDAYS[new Date(d + "T00:00:00").getDay()]})</span><Input value={t} maxLength={40} onChange={(e) => setExceptions((list) => list.map((x, j) => j === i ? [x[0], e.target.value] : x))} className="h-10 rounded-xl" /><Button type="button" variant="ghost" size="icon" aria-label="빼기" onClick={() => setExceptions((list) => list.filter((_, j) => j !== i))}><X className="size-4" /></Button></div>)}
+      <div className="flex flex-col gap-2 sm:flex-row"><Input type="date" min={todayStr()} value={newDate} onChange={(e) => setNewDate(e.target.value)} className="h-10 rounded-xl sm:w-40" /><Input value={newText} maxLength={40} onChange={(e) => setNewText(e.target.value)} placeholder="그날 일정 (예: 외부 출장)" className="h-10 rounded-xl" /><Button type="button" variant="outline" className="h-10 shrink-0" disabled={!newDate || !newText.trim()} onClick={() => { setExceptions((list) => [...list.filter(([d]) => d !== newDate), [newDate, newText.trim()] as [string, string]].sort()); setNewDate(""); setNewText(""); }}><Plus className="size-4" />추가</Button></div>
+    </div>
+    <DialogFooter className="gap-2"><Button variant="outline" className="h-11 sm:h-10" onClick={() => onOpenChange(false)}>취소</Button><Button className="h-11 sm:h-10" disabled={saving} onClick={() => onSave({ days: Object.fromEntries(Object.entries(days).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v)), exceptions: Object.fromEntries(exceptions.map(([d, t]) => [d, t.trim()]).filter(([, t]) => t)) })}>{saving ? <LoaderCircle className="animate-spin" /> : <CheckCircle2 />}저장</Button></DialogFooter>
   </DialogContent></Dialog>;
 }
 
