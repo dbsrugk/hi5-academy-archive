@@ -89,6 +89,14 @@ export const notifyApi = {
   unsubscribe: (endpoint: string) => call("push/unsubscribe", { endpoint }),
   test: () => call("push/test"),
 };
+// ---------- 읽음 확인 ----------
+export type Reader = { name: string; campus: string; title: string; at?: string };
+export const readsApi = {
+  mark: (collection: string, id: string) => call("reads/mark", { collection, id }),
+  counts: (collection: string, ids: string[]) => call("reads/counts", { collection, ids }) as Promise<{ counts: Record<string, number>; mine: string[] }>,
+  list: (collection: string, id: string) => call("reads/list", { collection, id }) as Promise<{ readers: Reader[]; unread?: Reader[] }>,
+};
+
 // ---------- 지문(패스키) 로그인 ----------
 const PASSKEY_FLAG = "hi5-passkey-device";
 export const passkeyApi = {
@@ -253,7 +261,7 @@ async function marketingGet(params: URLSearchParams, role: Role) {
     .filter((a) => !kind || a.assetType === kind)
     .filter((a) => !q || [a.title, a.assetType, a.channel, a.notes].some((f) => like(f, q)))
     .sort((a, b) => byDesc("updatedAt")(a, b) || b.id.localeCompare(a.id))
-    .slice(0, 24);
+    .slice(0, params.get("limit") === "all" ? 500 : 24);
   await ensureBlobs(rows.flatMap((a) => [a.previewKey, a.sourceKey]));
   return json({ assets: rows.map((a) => ({ ...a, previewUrl: fileUrl(a.previewKey), sourceUrl: fileUrl(a.sourceKey, true) })), nextCursor: null });
 }
@@ -352,7 +360,8 @@ async function requestsPost(body: Json) {
   const id = uid(), at = now();
   await setDoc("productionRequests", id, {
     title, branch, requester, assetType, purpose: str(body.purpose, 2000), specifications: str(body.specifications, 2000), requiredCopy: str(body.requiredCopy),
-    requestedDate, desiredDate, driveUrl, notes: str(body.notes), references: imagesOf(body.references, 10), status: "approval_pending", progressPercent: 0,
+    requestedDate, desiredDate, driveUrl, notes: str(body.notes), references: imagesOf(body.references, 10),
+    refAssets: (Array.isArray(body.refAssets) ? body.refAssets : []).filter((a: Json) => a && a.id).slice(0, 10).map((a: Json) => ({ id: str(a.id, 80), title: str(a.title, 160) })), status: "approval_pending", progressPercent: 0,
     assignee: "", delayedReason: "", revisedDueDate: "", resultAssetId: null, createdBy: whoAmI(), history: [{ status: "approval_pending", at, by: whoAmI(), note: "요청 등록" }], createdAt: at, updatedAt: at,
   });
   return json({ id }, 201);

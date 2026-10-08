@@ -1,5 +1,6 @@
 "use client";
 
+import { markRead, ReadBadge } from "./read-badge";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlarmClock, Download, ExternalLink, FileSpreadsheet, FileText, Files, Images, LoaderCircle, Newspaper, Paperclip, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -115,7 +116,7 @@ export function NationalNewsSection({ role }: { role: "staff" | "admin" }) {
     {tab === "news" ? (
       filtered.length ? <ul className="space-y-2.5">{filtered.map((it) => <li key={it.id}>
         <button type="button" onClick={() => setOpen(it)} className="block w-full rounded-2xl border border-border/80 bg-card p-4 text-left transition hover:border-primary/40 hover:shadow-sm">
-          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span className={`rounded-full px-2 py-0.5 font-semibold ${TONE[it.category] ?? TONE.공지}`}>{it.category}</span>{it.deadline && <DDay date={it.deadline} />}<span>{fmtDate(it.postedAt)}</span><span className="truncate">· {it.author}</span></div>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span className={`rounded-full px-2 py-0.5 font-semibold ${TONE[it.category] ?? TONE.공지}`}>{it.category}</span>{it.deadline && <DDay date={it.deadline} />}<span>{fmtDate(it.postedAt)}</span><span className="truncate">· {it.author}</span><ReadBadge collection="nationalNews" id={it.id} interactive={false} className="ml-auto" /></div>
           <p className="mt-2 text-[16px] leading-6 font-semibold">{it.title}</p>
           <p className="mt-1 line-clamp-2 text-sm leading-6 text-muted-foreground">{it.body.replace(/\n+/g, " ")}</p>
           {(it.files.length > 0 || it.photos > 0) && <div className="mt-3 flex flex-wrap gap-1.5">{it.files.slice(0, 3).map((f) => <FileChip key={f.key + f.name} file={f} />)}{it.files.length > 3 && <span className="self-center text-xs text-muted-foreground">외 {it.files.length - 3}개</span>}{it.photos > 0 && <span className="inline-flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1.5 text-xs text-muted-foreground"><Images className="size-3.5" />사진 {it.photos}장</span>}</div>}
@@ -142,7 +143,7 @@ function Empty({ text }: { text: string }) { return <div className="grid min-h-4
 function Detail({ item, isAdmin, onClose, onEdit, onDeleted }: { item: NewsItem | null; isAdmin: boolean; onClose: () => void; onEdit: (it: NewsItem) => void; onDeleted: () => void }) {
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => setConfirm(false), [item]);
+  useEffect(() => { setConfirm(false); if (item) void markRead("nationalNews", item.id); }, [item]);
   if (!item) return <Dialog open={false} />;
   async function remove() {
     if (!item) return;
@@ -156,6 +157,7 @@ function Detail({ item, isAdmin, onClose, onEdit, onDeleted }: { item: NewsItem 
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground"><span className={`rounded-full px-2 py-0.5 font-semibold ${TONE[item.category] ?? TONE.공지}`}>{item.category}</span>{item.deadline && <><DDay date={item.deadline} /><span>마감 {fmtDate(item.deadline)}</span></>}</div>
         <DialogTitle className="text-xl leading-7">{item.title}</DialogTitle>
         <DialogDescription>{item.author} · {fmtDate(item.postedAt)}</DialogDescription>
+        <div><ReadBadge collection="nationalNews" id={item.id} /></div>
       </DialogHeader>
       {item.files.length > 0 && <div className="rounded-xl bg-muted/50 p-3"><p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Paperclip className="size-4" />첨부 {item.files.length}개</p><div className="flex flex-wrap gap-1.5">{item.files.map((f) => <FileChip key={f.key + f.name} file={f} />)}</div></div>}
       <Body text={item.body} />

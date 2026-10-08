@@ -1,11 +1,13 @@
 "use client";
 
+import { markRead, ReadBadge } from "./read-badge";
 import Image from "next/image";
 import { fileUrl, getMe } from "@/archive-api";
 import { CampusDot, campusColor } from "@/lib/campus";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Eye, FileText, ImagePlus, LoaderCircle, Lock, Plus, Send, ShieldCheck, Trash2 } from "lucide-react";
+import { Images, X, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Eye, FileText, ImagePlus, LoaderCircle, Lock, Plus, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { MarketingPicker, takeRequestPrefill, type PickedRef } from "./marketing-picker";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +28,7 @@ type ProductionRequest = {
   id: string; title: string; branch: string; requester: string; assetType: string; purpose: string; specifications: string;
   requiredCopy: string; requestedDate: string; desiredDate: string; assignee: string; status: RequestStatus; progressPercent: number;
   driveUrl: string; delayedReason: string; revisedDueDate: string; notes: string; resultAssetId: string | null;
-  referenceImages?: ReferenceImage[]; history?: HistoryItem[]; createdBy?: string; approvedAt?: string; approvedBy?: string; completedAt?: string; updatedAt?: string; demo?: boolean;
+  referenceImages?: ReferenceImage[]; refAssets?: { id: string; title: string }[]; history?: HistoryItem[]; createdBy?: string; approvedAt?: string; approvedBy?: string; completedAt?: string; updatedAt?: string; demo?: boolean;
 };
 type ProductionSchedule = {
   id: string; title: string; branch: string; scheduleDate: string; assetType: string; manager: string; status: RequestStatus;
@@ -77,7 +79,7 @@ function stamp(iso?: string) {
 function myCampus() { const me = getMe(); return me && me.campus !== "전체" ? `${me.campus}캠퍼스` : campuses[0]; }
 function myName() { const me = getMe(); return me ? `${me.name}${me.title ? " " + me.title : ""}` : ""; }
 
-export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: { role: Role; demoMode: boolean; onOpenMarketing: () => void }) {
+export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: { role: Role; demoMode: boolean; onOpenMarketing: (assetId?: string) => void }) {
   const [requests, setRequests] = useState<ProductionRequest[]>(demoMode ? demoRequests : []);
   const [schedules, setSchedules] = useState<ProductionSchedule[]>(demoMode ? demoSchedules : []);
   const [overrides, setOverrides] = useState<PriorityOverride[]>([]);
@@ -88,6 +90,10 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("open");
   const [listLimit, setListLimit] = useState(10);
   const [formOpen, setFormOpen] = useState(false);
+  const [picked, setPicked] = useState<PickedRef[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // 마케팅 제작물에서 "이걸로 제작 요청하기"로 넘어오면 요청서를 바로 연다
+  useEffect(() => { const refs = takeRequestPrefill(); if (refs.length) { setPicked(refs.slice(0, 10)); setFormOpen(true); } }, []);
   const [files, setFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [managed, setManaged] = useState<ProductionRequest | null>(null);
@@ -148,10 +154,11 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
     const fresh = { assignee: "", status: "approval_pending" as RequestStatus, progressPercent: 0, delayedReason: "", revisedDueDate: "", resultAssetId: null, history: [{ status: "approval_pending" as RequestStatus, at: new Date().toISOString(), by: base.requester, note: "요청 등록" }] };
     try {
       if (demoMode) {
-        const referenceImages = files.map((file) => ({ src: URL.createObjectURL(file), name: file.name }));
+        const referenceImages = [...picked.map((r) => ({ src: r.src, name: r.name })), ...files.map((file) => ({ src: URL.createObjectURL(file), name: file.name }))];
         setRequests((current) => [{ id: crypto.randomUUID(), ...base, ...fresh, referenceImages, demo: true }, ...current]);
       } else {
-        const references: { key: string; name: string }[] = [];
+        const references: { key: string; name: string }[] = picked.map((r) => ({ key: r.key, name: `${r.assetTitle} · ${r.name}` }));
+        const refAssets = [...new Map(picked.map((r) => [r.assetId, { id: r.assetId, title: r.assetTitle }])).values()];
         for (const file of files) {
           const upload = new FormData(); upload.set("file", file); upload.set("purpose", "preview");
           const response = await fetch("/api/uploads", { method: "POST", body: upload });
@@ -159,12 +166,12 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
           if (!response.ok || !result.key) throw new Error(result.error ?? "참고 이미지 업로드에 실패했습니다.");
           references.push({ key: result.key, name: result.name ?? file.name });
         }
-        const response = await fetch("/api/production-requests", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...base, references }) });
+        const response = await fetch("/api/production-requests", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...base, references, refAssets }) });
         const data = await response.json() as { id?: string; error?: string };
         if (!response.ok || !data.id) throw new Error(data.error ?? "요청을 등록하지 못했습니다.");
-        setRequests((current) => [{ id: data.id!, ...base, ...fresh, updatedAt: new Date().toISOString(), referenceImages: references.map((image) => ({ src: fileUrl(image.key) ?? "", name: image.name })) }, ...current]);
+        setRequests((current) => [{ id: data.id!, ...base, ...fresh, updatedAt: new Date().toISOString(), referenceImages: references.map((image) => ({ src: fileUrl(image.key) ?? "", name: image.name })), refAssets }, ...current]);
       }
-      setFormOpen(false); setFiles([]); setStatusFilter("open"); toast.success("제작 요청을 등록했습니다. 관리자가 확인 후 승인합니다.");
+      setFormOpen(false); setFiles([]); setPicked([]); setStatusFilter("open"); toast.success("제작 요청을 등록했습니다. 관리자가 확인 후 승인합니다.");
     } catch (error) { toast.error(error instanceof Error ? error.message : "요청을 등록하지 못했습니다."); }
     finally { setSaving(false); }
   }
@@ -311,13 +318,20 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
         </div>
         <RequestText label="사용 목적과 채널" name="purpose" placeholder="예: 인스타그램 피드 + 원내 게시" />
         <RequestText label="필수 문구" name="requiredCopy" placeholder="꼭 들어가야 하는 문구, 날짜, 연락처" />
-        <div className="space-y-2"><Label>레퍼런스 이미지</Label><label className="flex min-h-24 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground"><ImagePlus className="mb-2 size-5" />{files.length ? `${files.length}장 선택됨` : "이미지 최대 10장 선택"}<input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0, 10))} /></label></div>
+        <div className="space-y-2"><Label>레퍼런스 이미지 <span className="font-normal text-muted-foreground">(합쳐서 최대 10장)</span></Label>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setPickerOpen(true)} disabled={picked.length + files.length >= 10} className="flex min-h-20 flex-col items-center justify-center rounded-xl border border-dashed border-primary/50 bg-primary/5 text-sm font-medium text-primary disabled:opacity-50"><Images className="mb-1.5 size-5" />제작물에서 가져오기</button>
+            <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground"><ImagePlus className="mb-1.5 size-5" />{files.length ? `내 사진 ${files.length}장` : "내 사진 올리기"}<input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(event) => setFiles(Array.from(event.target.files ?? []).slice(0, Math.max(0, 10 - picked.length)))} /></label>
+          </div>
+          {picked.length > 0 && <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">{picked.map((r) => <div key={r.key} className="relative aspect-[4/5] overflow-hidden rounded-lg bg-muted"><img src={r.src} alt={r.name} className="h-full w-full object-cover" /><span className="absolute inset-x-0 bottom-0 truncate bg-black/55 px-1 py-0.5 text-[10px] text-white">{r.assetTitle}</span><button type="button" aria-label="레퍼런스 빼기" onClick={() => setPicked((cur) => cur.filter((x) => x.key !== r.key))} className="absolute top-1 right-1 grid size-6 place-items-center rounded-full bg-black/60 text-white"><X className="size-3.5" /></button></div>)}</div>}
+        </div>
         <RequestField label="참고 자료 Google Drive 링크" name="driveUrl" type="url" placeholder="원본 사진·로고 폴더 링크 (선택)" />
         <RequestText label="추가 요청사항" name="notes" />
         <DialogFooter className="gap-2"><Button type="button" variant="outline" className="h-11 sm:h-10" onClick={() => setFormOpen(false)}>취소</Button><Button className="h-11 sm:h-10" disabled={saving}>{saving ? <LoaderCircle className="animate-spin" /> : <Send />}요청 등록</Button></DialogFooter>
       </form>
     </DialogContent></Dialog>
 
+    <MarketingPicker open={pickerOpen} onOpenChange={setPickerOpen} max={Math.max(0, 10 - files.length)} picked={picked} onDone={setPicked} />
     <RequestDialog item={managed} setItem={setManaged} canManage={canManage} saving={saving} onSave={saveWorkflow} onDelete={deleteRequest} onOpenMarketing={onOpenMarketing} />
     <ScheduleDialog item={scheduleDraft} setItem={setScheduleDraft} canManage={canManage} saving={saving} onSave={saveSchedule} />
   </div>;
@@ -335,7 +349,7 @@ function RequestRow({ item, onOpen }: { item: ProductionRequest; onOpen: () => v
         <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted"><span className={`block h-full rounded-full ${statusBar[item.status]}`} style={{ width: `${item.status === "completed" ? 100 : Math.max(item.progressPercent, 4)}%` }} /></span>
         <span className="shrink-0 tabular-nums">{item.status === "completed" ? `완료 ${dotted(item.completedAt ?? due)}` : <>마감 {dotted(due).slice(5)} <b className={late ? "text-rose-600" : "text-foreground"}>{dday(due)}</b></>}</span>
       </span>
-      <span className="mt-1 block text-[12px] text-muted-foreground">담당 {item.assignee || "미정"}</span>
+      <span className="mt-1 flex items-center justify-between gap-2 text-[12px] text-muted-foreground"><span>담당 {item.assignee || "미정"}</span>{!item.demo && <ReadBadge collection="productionRequests" id={item.id} interactive={false} />}</span>
     </span>
   </button>;
 }
@@ -397,9 +411,9 @@ function ProductionScheduleView({ monthCursor, setMonthCursor, selectedDate, set
 
 const flowSteps: RequestStatus[] = ["approval_pending", "producing", "reviewing", "completed"];
 
-function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onOpenMarketing }: { item: ProductionRequest | null; setItem: (item: ProductionRequest | null) => void; canManage: boolean; saving: boolean; onSave: (override?: Partial<ProductionRequest>) => void; onDelete: () => void; onOpenMarketing: () => void }) {
+function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onOpenMarketing }: { item: ProductionRequest | null; setItem: (item: ProductionRequest | null) => void; canManage: boolean; saving: boolean; onSave: (override?: Partial<ProductionRequest>) => void; onDelete: () => void; onOpenMarketing: (assetId?: string) => void }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  useEffect(() => setConfirmDelete(false), [item?.id]);
+  useEffect(() => { setConfirmDelete(false); if (item && !item.demo) void markRead("productionRequests", item.id); }, [item?.id]);
   if (!item) return null;
   const due = effectiveDue(item);
   const stepIndex = item.status === "delayed" ? 1 : flowSteps.indexOf(item.status);
@@ -407,7 +421,7 @@ function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onO
     : item.status === "producing" || item.status === "delayed" ? { label: "시안 완료 · 컨펌 요청", status: "reviewing", progress: 80 }
     : item.status === "reviewing" ? { label: "최종 완료 처리", status: "completed", progress: 100 } : null;
   return <Dialog open onOpenChange={(open) => !open && setItem(null)}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
-    <DialogHeader className="text-left"><DialogTitle className="pr-6 leading-7">{item.title}</DialogTitle><DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="inline-flex items-center gap-1"><CampusDot branch={item.branch} />{item.branch}</span><span>· 요청 {dotted(item.requestedDate)}</span><span>· 마감 {dotted(due)} {item.status !== "completed" && <b className="text-foreground">{dday(due)}</b>}</span></DialogDescription></DialogHeader>
+    <DialogHeader className="text-left"><DialogTitle className="pr-6 leading-7">{item.title}</DialogTitle>{!item.demo && <div><ReadBadge collection="productionRequests" id={item.id} /></div>}<DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="inline-flex items-center gap-1"><CampusDot branch={item.branch} />{item.branch}</span><span>· 요청 {dotted(item.requestedDate)}</span><span>· 마감 {dotted(due)} {item.status !== "completed" && <b className="text-foreground">{dday(due)}</b>}</span></DialogDescription></DialogHeader>
 
     {/* 진행 단계 */}
     <div className="rounded-xl border p-3">
@@ -416,6 +430,7 @@ function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onO
       {item.status === "delayed" && <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:bg-rose-950/40 dark:text-rose-200">지연 사유: {item.delayedReason || "-"} · 변경 완료일 {dotted(item.revisedDueDate)}</p>}
     </div>
 
+    {item.refAssets?.length ? <div className="flex flex-wrap items-center gap-1.5 text-sm"><span className="text-muted-foreground">참고한 제작물</span>{item.refAssets.map((a) => <button key={a.id} type="button" onClick={() => { setItem(null); onOpenMarketing(a.id); }} className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10"><Images className="size-3.5" />{a.title}</button>)}</div> : null}
     {item.referenceImages?.length ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{item.referenceImages.slice(0, 8).map((image, index) => <div key={`${image.src}-${index}`} className="relative aspect-square overflow-hidden rounded-lg bg-muted"><Image src={image.src} alt={image.name ?? "참고 이미지"} fill unoptimized className="object-cover" /></div>)}</div> : null}
     <dl className="grid gap-3 rounded-xl bg-muted/45 p-4 text-sm sm:grid-cols-2">
       <Info label="제작물" value={`${item.assetType} · ${item.specifications || "규격 미입력"}`} />
@@ -446,7 +461,7 @@ function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onO
     <DialogFooter className="gap-2">
       <Button variant="outline" className="h-11 sm:h-10" onClick={() => setItem(null)}>닫기</Button>
       {item.driveUrl && /^https?:\/\//.test(item.driveUrl) && <Button variant="outline" className="h-11 sm:h-10" asChild><a href={item.driveUrl} target="_blank" rel="noreferrer"><ExternalLink />Drive</a></Button>}
-      {item.status === "completed" && <Button variant="outline" className="h-11 sm:h-10" onClick={onOpenMarketing}><FileText />제작물 보기</Button>}
+      {item.status === "completed" && <Button variant="outline" className="h-11 sm:h-10" onClick={() => onOpenMarketing()}><FileText />제작물 보기</Button>}
       {canManage && <Button className="h-11 sm:h-10" onClick={() => onSave()} disabled={saving}>{saving && <LoaderCircle className="animate-spin" />}저장</Button>}
     </DialogFooter>
   </DialogContent></Dialog>;

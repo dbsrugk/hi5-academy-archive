@@ -88,6 +88,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { Textarea } from "@/components/ui/textarea";
 import { FundSection } from "@/components/archive/fund-section";
 import { NationalNewsSection } from "@/components/archive/national-news-section";
+import { refsOf, stashRequestPrefill, type PickedRef } from "@/components/archive/marketing-picker";
+import { markRead, ReadBadge } from "@/components/archive/read-badge";
 import { LoginGate } from "@/components/archive/login-gate";
 import { MembersSection } from "@/components/archive/members-section";
 import { getMe } from "@/archive-api";
@@ -1032,6 +1034,25 @@ export default function Home() {
   const [navBadges, setNavBadges] = useState<{ requests?: number; members?: number }>({});
   const [profileOpen, setProfileOpen] = useState(false);
 
+  // 제작 요청의 "참고한 제작물"을 누르면 그 제작물을 바로 연다
+  useEffect(() => {
+    if (!role || section !== "marketing") return;
+    const open = async (id?: string | null) => {
+      if (!id) return;
+      try { sessionStorage.removeItem("archive-open"); } catch { /* 무시 */ }
+      const hit = assets.find((a) => a.id === id);
+      if (hit) { setSelectedAsset(hit); return; }
+      try { const d = await (await fetch("/api/marketing?limit=all", { cache: "no-store" })).json() as { assets?: MarketingAsset[] }; const found = d.assets?.find((a) => a.id === id); if (found) setSelectedAsset(found); } catch { /* 무시 */ }
+    };
+    let pending: string | null = null;
+    try { pending = sessionStorage.getItem("archive-open"); } catch { /* 무시 */ }
+    void open(pending);
+    const onOpen = (e: Event) => void open((e as CustomEvent<string>).detail);
+    window.addEventListener("archive-open", onOpen);
+    return () => window.removeEventListener("archive-open", onOpen);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [role, section]);
+
   // 보안: 30분 동안 아무 조작이 없으면 자동 로그아웃
   useEffect(() => {
     if (!role || demoMode) return;
@@ -1410,7 +1431,7 @@ export default function Home() {
             />
           )}
 
-          {section === "promotions" ? <PromotionsSection role={role} demoMode={demoMode} /> : section === "requests" ? <ProductionRequestsSection role={role} demoMode={demoMode} onOpenMarketing={() => changeSection("marketing")} /> : section === "compliance" ? <ComplianceSection role={role} demoMode={demoMode} /> : section === "fund" ? <FundSection /> : section === "national" ? <NationalNewsSection role={role} /> : section === "members" ? <MembersSection /> : section === "events" ? (
+          {section === "promotions" ? <PromotionsSection role={role} demoMode={demoMode} /> : section === "requests" ? <ProductionRequestsSection role={role} demoMode={demoMode} onOpenMarketing={(assetId) => { if (assetId) { try { sessionStorage.setItem("archive-open", assetId); } catch { /* 무시 */ } } changeSection("marketing"); if (assetId) window.dispatchEvent(new CustomEvent("archive-open", { detail: assetId })); }} /> : section === "compliance" ? <ComplianceSection role={role} demoMode={demoMode} /> : section === "fund" ? <FundSection /> : section === "national" ? <NationalNewsSection role={role} /> : section === "members" ? <MembersSection /> : section === "events" ? (
             events.length ? <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{events.map((event) => <EventCard key={event.id} event={event} role={role} onOpen={setSelectedEvent} onStatus={updateStatus} onDelete={deleteRecord} />)}</div> : <EmptyState onReset={resetFilters} />
           ) : section === "marketing" ? assets.length ? (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{assets.map((asset) => <MarketingCard key={asset.id} asset={asset} role={role} onOpen={setSelectedAsset} onStatus={updateStatus} onDelete={deleteRecord} />)}</div>
@@ -1421,7 +1442,7 @@ export default function Home() {
       </SidebarInset>
 
       <EventDetail event={selectedEvent} onClose={() => setSelectedEvent(null)} />
-      <MarketingDetail asset={selectedAsset} relatedTitle={selectedAsset?.relatedEventId ? relatedTitles.get(selectedAsset.relatedEventId) : undefined} onClose={() => setSelectedAsset(null)} />
+      <MarketingDetail asset={selectedAsset} relatedTitle={selectedAsset?.relatedEventId ? relatedTitles.get(selectedAsset.relatedEventId) : undefined} onClose={() => setSelectedAsset(null)} onRequest={demoMode ? undefined : (refs) => { stashRequestPrefill(refs); setSelectedAsset(null); changeSection("requests"); }} />
       <MeetingDetail meeting={selectedMeeting} onClose={() => setSelectedMeeting(null)} />
       <Dialog open={editorOpen && (section === "events" || section === "marketing" || section === "meetings")} onOpenChange={setEditorOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
@@ -1502,7 +1523,7 @@ function EventCard({ event, role, onOpen, onStatus, onDelete }: { event: EventRe
           <span className="absolute right-3 top-3 grid size-9 place-items-center rounded-full bg-background/90 text-foreground opacity-90 shadow-sm backdrop-blur transition group-hover:scale-105" aria-hidden="true"><ZoomIn className="size-4" /></span>
           {event.status === "draft" && <Badge variant="secondary" className="absolute left-3 top-3 rounded-full">초안</Badge>}
         </div>
-        <CardContent className="p-3.5 md:p-4"><h3 className="line-clamp-2 min-h-12 text-[15px] font-semibold leading-6 md:text-base">{event.title}</h3><p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><CampusDot branch={event.branch} /><span className="truncate">{campusShort(event.branch)} · {formatPeriod(event.startDate, event.endDate)}</span></p></CardContent>
+        <CardContent className="p-3.5 md:p-4"><h3 className="line-clamp-2 min-h-12 text-[15px] font-semibold leading-6 md:text-base">{event.title}</h3><p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><CampusDot branch={event.branch} /><span className="truncate">{campusShort(event.branch)} · {formatPeriod(event.startDate, event.endDate)}</span></p>{!event.demo && <ReadBadge collection="events" id={event.id} interactive={false} className="mt-2" />}</CardContent>
       </button>
       {role === "admin" && !event.demo && <div className="px-4 pb-4"><AdminActions status={event.status} onStatus={(status) => onStatus("events", event.id, status)} onDelete={() => onDelete("events", event.id)} /></div>}
     </Card>
@@ -1519,7 +1540,7 @@ function MarketingCard({ asset, role, onOpen, onStatus, onDelete }: { asset: Mar
           {(asset.galleryImages?.length ?? 0) > 1 && <span className="absolute bottom-5 right-5 flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-xs font-medium text-white backdrop-blur" aria-hidden="true"><Images className="size-3.5" />{asset.galleryImages?.length}장</span>}
           {asset.status === "draft" && <Badge variant="secondary" className="absolute left-5 top-5 rounded-full">초안</Badge>}
         </div>
-        <CardContent className="p-3.5 md:p-4"><h3 className="line-clamp-2 min-h-12 text-[15px] font-semibold leading-6 md:text-base">{asset.title}</h3><p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><CampusDot branch={asset.branch} /><span className="truncate">{campusShort(asset.branch)} · {asset.assetType} · {asset.createdDate.replaceAll("-", ".")}</span></p></CardContent>
+        <CardContent className="p-3.5 md:p-4"><h3 className="line-clamp-2 min-h-12 text-[15px] font-semibold leading-6 md:text-base">{asset.title}</h3><p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground"><CampusDot branch={asset.branch} /><span className="truncate">{campusShort(asset.branch)} · {asset.assetType} · {asset.createdDate.replaceAll("-", ".")}</span></p>{!asset.demo && <ReadBadge collection="marketing" id={asset.id} interactive={false} className="mt-2" />}</CardContent>
       </button>
       {role === "admin" && !asset.demo && <div className="px-4 pb-4"><AdminActions status={asset.status} onStatus={(status) => onStatus("marketing", asset.id, status)} onDelete={() => onDelete("marketing", asset.id)} /></div>}
     </Card>
@@ -1545,6 +1566,7 @@ function MeetingCard({ meeting, role, onOpen, onStatus, onDelete }: { meeting: M
         <div className="flex flex-wrap gap-2 text-xs text-muted-foreground sm:justify-end">
           <span className="rounded-full bg-muted px-3 py-1.5">결정 {countLines(meeting.decisions)}건</span>
           <span className="rounded-full bg-muted px-3 py-1.5">후속 업무 {countLines(meeting.actionItems)}건</span>
+          {!meeting.demo && <ReadBadge collection="meetings" id={meeting.id} interactive={false} className="px-3 py-1.5" />}
         </div>
       </button>
       {role === "admin" && !meeting.demo && <div className="px-5 pb-4"><AdminActions status={meeting.status} onStatus={(status) => onStatus("meetings", meeting.id, status)} onDelete={() => onDelete("meetings", meeting.id)} /></div>}
@@ -1562,6 +1584,7 @@ function AdminActions({ status, onStatus, onDelete }: { status: PublishStatus; o
 }
 
 function EventDetail({ event, onClose }: { event: EventRecord | null; onClose: () => void }) {
+  useEffect(() => { if (event && !event.demo) void markRead("events", event.id); }, [event]);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const photos = useMemo<EventImage[]>(() => {
@@ -1601,7 +1624,7 @@ function EventDetail({ event, onClose }: { event: EventRecord | null; onClose: (
               </div>
               {photos.length > 0 && <div className="border-t border-white/10 bg-black/35 p-3"><div className="mb-2 flex items-center justify-between px-1 text-xs text-white/70"><span>{activePhoto?.caption}</span><span>{photoIndex + 1} / {photos.length}</span></div><div className="flex gap-2 overflow-x-auto pb-1">{photos.map((photo, index) => <button type="button" key={`${photo.src}-${index}`} onClick={() => setPhotoIndex(index)} className={`relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border-2 transition ${index === photoIndex ? "border-white" : "border-transparent opacity-55 hover:opacity-90"}`} aria-label={`${index + 1}번 사진 보기`} aria-current={index === photoIndex ? "true" : undefined}><Image src={photo.src} alt="" fill unoptimized className="object-cover object-center" sizes="96px" /></button>)}</div></div>}
             </div>
-            <div className="overflow-y-auto p-6 md:p-8"><DialogHeader className="text-center"><DialogDescription>{event.branch} · {formatPeriod(event.startDate, event.endDate)}</DialogDescription><DialogTitle className="px-5 text-center text-2xl leading-9">{event.title}</DialogTitle></DialogHeader><RecordTagBadges tags={recordTags(event)} /><div className="mt-5 grid grid-cols-2 gap-3"><DetailStat icon={CalendarDays} label="행사 기간" value={formatPeriod(event.startDate, event.endDate)} /><DetailStat icon={Users} label="참여 인원" value={`${event.participantCount}명`} /><DetailStat icon={Wallet} label="총예산" value={event.budget !== null ? `${won.format(event.budget)}원` : "미입력"} /><DetailStat icon={Sparkles} label="이벤트 유형" value={event.eventType} /></div><DetailSection title="행사 개요"><p>{event.summary || "입력된 내용이 없습니다."}</p>{event.venue && <p className="mt-2 text-sm">장소 · {event.venue}</p>}</DetailSection>{event.programs.length > 0 && <DetailSection title="세부 프로그램"><div className="grid gap-3">{event.programs.map((program, index) => <div key={program.id ?? `${program.name}-${index}`} className="rounded-xl bg-muted/60 p-4"><strong className="text-sm">{program.name}</strong><p className="mt-1 text-sm">{program.description}</p><p className="mt-2 text-xs text-muted-foreground">{[program.audience, program.schedule, program.instructors].filter(Boolean).join(" · ")}</p></div>)}</div></DetailSection>}{event.preparation && <DetailSection title="준비사항"><p>{event.preparation}</p></DetailSection>}<DetailSection title="후기와 개선점"><p>{event.review || "입력된 후기가 없습니다."}</p></DetailSection>{(event.sourceAuthor || event.sourceDate || event.sourceUrl) && <DetailSection title="원문 정보"><p>{[event.sourceAuthor, event.sourceDate].filter(Boolean).join(" · ")}</p>{event.sourceUrl && <a href={event.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-primary underline underline-offset-4">밴드 원문 열기</a>}</DetailSection>}</div>
+            <div className="overflow-y-auto p-6 md:p-8"><DialogHeader className="text-center"><DialogDescription>{event.branch} · {formatPeriod(event.startDate, event.endDate)}</DialogDescription>{!event.demo && <div className="flex justify-center"><ReadBadge collection="events" id={event.id} /></div>}<DialogTitle className="px-5 text-center text-2xl leading-9">{event.title}</DialogTitle></DialogHeader><RecordTagBadges tags={recordTags(event)} /><div className="mt-5 grid grid-cols-2 gap-3"><DetailStat icon={CalendarDays} label="행사 기간" value={formatPeriod(event.startDate, event.endDate)} /><DetailStat icon={Users} label="참여 인원" value={`${event.participantCount}명`} /><DetailStat icon={Wallet} label="총예산" value={event.budget !== null ? `${won.format(event.budget)}원` : "미입력"} /><DetailStat icon={Sparkles} label="이벤트 유형" value={event.eventType} /></div><DetailSection title="행사 개요"><p>{event.summary || "입력된 내용이 없습니다."}</p>{event.venue && <p className="mt-2 text-sm">장소 · {event.venue}</p>}</DetailSection>{event.programs.length > 0 && <DetailSection title="세부 프로그램"><div className="grid gap-3">{event.programs.map((program, index) => <div key={program.id ?? `${program.name}-${index}`} className="rounded-xl bg-muted/60 p-4"><strong className="text-sm">{program.name}</strong><p className="mt-1 text-sm">{program.description}</p><p className="mt-2 text-xs text-muted-foreground">{[program.audience, program.schedule, program.instructors].filter(Boolean).join(" · ")}</p></div>)}</div></DetailSection>}{event.preparation && <DetailSection title="준비사항"><p>{event.preparation}</p></DetailSection>}<DetailSection title="후기와 개선점"><p>{event.review || "입력된 후기가 없습니다."}</p></DetailSection>{(event.sourceAuthor || event.sourceDate || event.sourceUrl) && <DetailSection title="원문 정보"><p>{[event.sourceAuthor, event.sourceDate].filter(Boolean).join(" · ")}</p>{event.sourceUrl && <a href={event.sourceUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-primary underline underline-offset-4">밴드 원문 열기</a>}</DetailSection>}</div>
           </>}
         </DialogContent>
       </Dialog>
@@ -1615,7 +1638,8 @@ function EventDetail({ event, onClose }: { event: EventRecord | null; onClose: (
   );
 }
 
-function MarketingDetail({ asset, relatedTitle, onClose }: { asset: MarketingAsset | null; relatedTitle?: string; onClose: () => void }) {
+function MarketingDetail({ asset, relatedTitle, onClose, onRequest }: { asset: MarketingAsset | null; relatedTitle?: string; onClose: () => void; onRequest?: (refs: PickedRef[]) => void }) {
+  useEffect(() => { if (asset && !asset.demo) void markRead("marketing", asset.id); }, [asset]);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const photos = useMemo<EventImage[]>(() => {
@@ -1655,7 +1679,7 @@ function MarketingDetail({ asset, relatedTitle, onClose }: { asset: MarketingAss
               </div>
               {photos.length > 0 && <div className="border-t border-white/10 bg-black/35 p-3"><div className="mb-2 flex items-center justify-between px-1 text-xs text-white/70"><span>{activePhoto?.caption}</span><span>{photoIndex + 1} / {photos.length}</span></div><div className="flex gap-2 overflow-x-auto pb-1">{photos.map((photo, index) => <button type="button" key={`${photo.src}-${index}`} onClick={() => setPhotoIndex(index)} className={`relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border-2 transition ${index === photoIndex ? "border-white" : "border-transparent opacity-55 hover:opacity-90"}`} aria-label={`${index + 1}번 제작물 보기`} aria-current={index === photoIndex ? "true" : undefined}><Image src={photo.src} alt="" fill unoptimized className="object-cover object-center" sizes="96px" /></button>)}</div></div>}
             </div>
-            <div className="overflow-y-auto p-6 md:p-8"><DialogHeader className="text-center"><DialogDescription>{asset.branch} · {asset.createdDate}</DialogDescription><DialogTitle className="px-5 text-center text-2xl leading-9">{asset.title}</DialogTitle></DialogHeader><div className="mt-4 flex flex-wrap justify-center gap-2"><Badge variant="secondary" className="rounded-full">{asset.assetType}</Badge><Badge variant="outline" className="rounded-full">{asset.target}</Badge>{asset.channel && <Badge variant="outline" className="rounded-full">{asset.channel}</Badge>}{asset.fileFormat && <Badge variant="outline" className="rounded-full">{asset.fileFormat}</Badge>}</div>{(asset.specifications || asset.quantity) && <DetailSection title="제작 규격"><p>{[asset.specifications, asset.quantity ? `수량 ${asset.quantity}개` : ""].filter(Boolean).join(" · ")}</p></DetailSection>}{asset.notes && <DetailSection title="제작물 메모"><p>{asset.notes}</p></DetailSection>}{relatedTitle && <div className="mt-6 rounded-xl bg-primary/10 px-4 py-3 text-sm text-primary">관련 이벤트 · {relatedTitle}</div>}<div className="mt-6 flex flex-wrap gap-2">{asset.driveUrl && <Button className="rounded-xl" asChild><a href={asset.driveUrl} target="_blank" rel="noreferrer"><ExternalLink className="size-4" />Google Drive에서 보기</a></Button>}{asset.sourceUrl && <Button variant="outline" className="rounded-xl" asChild><a href={asset.sourceUrl}><Download className="size-4" />원본 파일 다운로드</a></Button>}</div></div>
+            <div className="overflow-y-auto p-6 md:p-8"><DialogHeader className="text-center"><DialogDescription>{asset.branch} · {asset.createdDate}</DialogDescription>{!asset.demo && <div className="flex justify-center"><ReadBadge collection="marketing" id={asset.id} /></div>}<DialogTitle className="px-5 text-center text-2xl leading-9">{asset.title}</DialogTitle></DialogHeader><div className="mt-4 flex flex-wrap justify-center gap-2"><Badge variant="secondary" className="rounded-full">{asset.assetType}</Badge><Badge variant="outline" className="rounded-full">{asset.target}</Badge>{asset.channel && <Badge variant="outline" className="rounded-full">{asset.channel}</Badge>}{asset.fileFormat && <Badge variant="outline" className="rounded-full">{asset.fileFormat}</Badge>}</div>{(asset.specifications || asset.quantity) && <DetailSection title="제작 규격"><p>{[asset.specifications, asset.quantity ? `수량 ${asset.quantity}개` : ""].filter(Boolean).join(" · ")}</p></DetailSection>}{asset.notes && <DetailSection title="제작물 메모"><p>{asset.notes}</p></DetailSection>}{relatedTitle && <div className="mt-6 rounded-xl bg-primary/10 px-4 py-3 text-sm text-primary">관련 이벤트 · {relatedTitle}</div>}<div className="mt-6 flex flex-wrap gap-2">{asset.driveUrl && <Button className="rounded-xl" asChild><a href={asset.driveUrl} target="_blank" rel="noreferrer"><ExternalLink className="size-4" />Google Drive에서 보기</a></Button>}{asset.sourceUrl && <Button variant="outline" className="rounded-xl" asChild><a href={asset.sourceUrl}><Download className="size-4" />원본 파일 다운로드</a></Button>}</div>{onRequest && <div className="mt-6 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4"><p className="text-sm font-semibold">이 제작물을 참고해서 새로 만들고 싶나요?</p><p className="mt-1 text-xs leading-5 text-muted-foreground">{photos.length > 1 ? `지금 보고 있는 시안(${activePhoto?.caption ?? photoIndex + 1})이` : "이 제작물이"} 레퍼런스로 담긴 요청서가 열려요. 예) "명지 버전으로 똑같이"</p><Button className="mt-3 h-11 w-full rounded-xl" onClick={() => { const refs = refsOf(asset as never); const one = refs[photoIndex] ?? refs[0]; onRequest(one ? [one] : []); }}><ClipboardList className="size-4" />이걸로 제작 요청하기</Button></div>}</div>
           </>}
         </DialogContent>
       </Dialog>
@@ -1670,12 +1694,14 @@ function MarketingDetail({ asset, relatedTitle, onClose }: { asset: MarketingAss
 }
 
 function MeetingDetail({ meeting, onClose }: { meeting: MeetingNote | null; onClose: () => void }) {
+  useEffect(() => { if (meeting && !meeting.demo) void markRead("meetings", meeting.id); }, [meeting]);
   return (
     <Dialog open={Boolean(meeting)} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
         {meeting && <>
           <DialogHeader className="text-center">
             <DialogDescription>{[meeting.organization, formatPeriod(meeting.meetingDate, null)].filter(Boolean).join(" · ")}</DialogDescription>
+            {!meeting.demo && <div className="flex justify-center"><ReadBadge collection="meetings" id={meeting.id} /></div>}
             <DialogTitle className="px-5 text-center text-2xl leading-9">{meeting.title}</DialogTitle>
           </DialogHeader>
           <RecordTagBadges tags={recordTags(meeting)} />

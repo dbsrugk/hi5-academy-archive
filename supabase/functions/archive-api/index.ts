@@ -27,6 +27,7 @@ const now = () => new Date().toISOString();
 const COLLECTIONS = new Set(["events", "marketing", "meetings", "promotions", "productionRequests", "productionSchedules", "productionPriority", "complianceRequirements", "complianceSubmissions", "complianceLogs", "fund", "nationalNews"]);
 const STAFF_CREATE = new Set(["promotions", "productionRequests", "complianceSubmissions", "complianceLogs"]);
 const ADMIN_READ = new Set(["complianceLogs"]);
+const READ_TRACKED = new Set(["events", "marketing", "meetings", "promotions", "nationalNews", "productionRequests"]);
 const DRAFT_FIELD: Record<string, string> = { events: "status", marketing: "status", meetings: "status", promotions: "visibility" };
 
 // ---------- 설정·토큰 ----------
@@ -601,6 +602,39 @@ Deno.serve(async (req) => {
     if (path === "db/list") return COLLECTIONS.has(body.collection) ? await dbList(body.collection, role, principal) : json({ docs: [] });
     if (path === "db/get") return COLLECTIONS.has(body.collection) ? await dbGet(body.collection, String(body.id ?? ""), role, principal) : json({ doc: null });
     if (path === "db/set" || path === "db/update" || path === "db/delete") return await dbWrite(path.slice(3), body, role, principal, me);
+
+    // 읽음 확인 (누가 몇 명 확인했는지)
+    if (path === "reads/mark" || path === "reads/counts" || path === "reads/list") {
+      const collection = String(body.collection ?? "");
+      if (!READ_TRACKED.has(collection) || !canRead(collection, role, principal)) return json({ ok: false }, 400);
+      if (path === "reads/mark") {
+        const id = String(body.id ?? "").slice(0, 120);
+        if (!id) return json({ ok: false }, 400);
+        const { error } = await supabase.from("post_reads").upsert({ collection, doc_id: id, member_id: me.id, last_at: now() }, { onConflict: "collection,doc_id,member_id", ignoreDuplicates: false });
+        if (error) throw error;
+        return json({ ok: true });
+      }
+      if (path === "reads/counts") {
+        const ids = (Array.isArray(body.ids) ? body.ids : []).map(String).slice(0, 300);
+        if (!ids.length) return json({ ok: true, counts: {}, mine: [] });
+        const { data } = await supabase.from("post_reads").select("doc_id,member_id").eq("collection", collection).in("doc_id", ids);
+        const counts: Record<string, number> = {}; const mine: string[] = [];
+        for (const r of data ?? []) { counts[r.doc_id] = (counts[r.doc_id] ?? 0) + 1; if (r.member_id === me.id) mine.push(r.doc_id); }
+        return json({ ok: true, counts, mine });
+      }
+      const id = String(body.id ?? "");
+      const { data: rows } = await supabase.from("post_reads").select("member_id,first_at").eq("collection", collection).eq("doc_id", id).order("first_at", { ascending: true });
+      const { data: people } = await supabase.from("members").select("id,campus,title,name,status,is_admin");
+      const byId = new Map((people ?? []).map((m) => [m.id, m]));
+      const label = (m: Json) => ({ name: m.name, campus: m.campus === ALL_CAMPUS ? "이사" : m.campus, title: m.title });
+      const readers = (rows ?? []).filter((r) => byId.has(r.member_id)).map((r) => ({ ...label(byId.get(r.member_id)!), at: r.first_at }));
+      let unread: Json[] | undefined;
+      if (me.is_admin) {
+        const seen = new Set((rows ?? []).map((r) => r.member_id));
+        unread = (people ?? []).filter((m) => m.status === "approved" && !seen.has(m.id) && canRead(collection, m.is_admin ? "admin" : "staff", isPrincipal(m.title))).map(label);
+      }
+      return json({ ok: true, readers, unread });
+    }
 
     // 알림
     if (path === "notify/list") return await notifyList(me);
