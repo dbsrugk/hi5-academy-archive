@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 
 // 제작 요청에 '마케팅 제작물'을 레퍼런스로 담기
 export type PickedRef = { key: string; src: string; name: string; assetId: string; assetTitle: string };
-type Asset = { id: string; title: string; branch: string; assetType: string; createdDate: string; previewKey?: string | null; previewUrl?: string | null; galleryImages?: { src: string; alt?: string; caption?: string }[] };
+type Asset = { id: string; title: string; branch: string; assetType: string; createdDate: string; previewKey?: string | null; previewUrl?: string | null; galleryImages?: { src: string; key?: string; alt?: string; caption?: string }[] };
 
 const PREFILL = "hi5-request-prefill";
 /** 마케팅 제작물 화면에서 "이걸로 제작 요청하기" → 제작 요청 화면이 받아서 요청서를 연다 */
@@ -18,7 +18,7 @@ export function takeRequestPrefill(): PickedRef[] { try { const v = sessionStora
 
 /** 제작물 한 건의 이미지들을 레퍼런스 후보로 펼친다 (시안이 여러 장이면 장마다) */
 export function refsOf(a: Asset): PickedRef[] {
-  if (a.galleryImages?.length) return a.galleryImages.map((g, i) => ({ key: g.src, src: g.src, name: g.caption || `${a.title} ${i + 1}`, assetId: a.id, assetTitle: a.title }));
+  if (a.galleryImages?.length) return a.galleryImages.map((g, i) => ({ key: g.key ?? g.src, src: g.src, name: g.caption || `${a.title} ${i + 1}`, assetId: a.id, assetTitle: a.title }));
   if (a.previewKey) return [{ key: a.previewKey, src: a.previewUrl ?? "", name: a.title, assetId: a.id, assetTitle: a.title }];
   return [];
 }

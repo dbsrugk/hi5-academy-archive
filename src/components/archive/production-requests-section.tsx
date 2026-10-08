@@ -5,7 +5,7 @@ import Image from "next/image";
 import { fileUrl, getMe } from "@/archive-api";
 import { CampusDot, campusColor } from "@/lib/campus";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Images, X, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Eye, FileText, ImagePlus, LoaderCircle, Lock, Plus, Send, ShieldCheck, Trash2 } from "lucide-react";
+import { Images, X, Pencil, Upload, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Eye, FileText, ImagePlus, LoaderCircle, Lock, Plus, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { MarketingPicker, takeRequestPrefill, type PickedRef } from "./marketing-picker";
 
@@ -23,12 +23,13 @@ import { Textarea } from "@/components/ui/textarea";
 type Role = "staff" | "admin";
 type RequestStatus = "approval_pending" | "producing" | "reviewing" | "delayed" | "completed";
 type ReferenceImage = { src: string; name?: string };
+type ProgressImage = { key: string; src?: string | null; name?: string; caption?: string; at?: string; by?: string };
 type HistoryItem = { status: RequestStatus; at: string; by?: string; note?: string };
 type ProductionRequest = {
   id: string; title: string; branch: string; requester: string; assetType: string; purpose: string; specifications: string;
   requiredCopy: string; requestedDate: string; desiredDate: string; assignee: string; status: RequestStatus; progressPercent: number;
   driveUrl: string; delayedReason: string; revisedDueDate: string; notes: string; resultAssetId: string | null;
-  referenceImages?: ReferenceImage[]; refAssets?: { id: string; title: string }[]; history?: HistoryItem[]; createdBy?: string; approvedAt?: string; approvedBy?: string; completedAt?: string; updatedAt?: string; demo?: boolean;
+  referenceImages?: ReferenceImage[]; progressImages?: ProgressImage[]; createdById?: string | null; refAssets?: { id: string; title: string }[]; history?: HistoryItem[]; createdBy?: string; approvedAt?: string; approvedBy?: string; completedAt?: string; updatedAt?: string; demo?: boolean;
 };
 type ProductionSchedule = {
   id: string; title: string; branch: string; scheduleDate: string; assetType: string; manager: string; status: RequestStatus;
@@ -37,8 +38,13 @@ type ProductionSchedule = {
 type PriorityOverride = { monthKey: string; branch: string };
 type StatusFilter = "open" | "all" | RequestStatus;
 
-const campuses = ["김해캠퍼스", "센텀캠퍼스", "명지캠퍼스"] as const;
-const short: Record<string, string> = { 김해캠퍼스: "김해", 센텀캠퍼스: "센텀", 명지캠퍼스: "명지", "본사 공통": "본사" };
+const campuses = ["김해캠퍼스", "센텀캠퍼스", "명지캠퍼스", "공동"] as const; // 공동 = 여러 캠퍼스가 함께 쓰는 작업물
+const ROTATION = ["김해캠퍼스", "센텀캠퍼스", "명지캠퍼스"] as const; // 이달 우선 캠퍼스 순환
+const short: Record<string, string> = { 김해캠퍼스: "김해", 센텀캠퍼스: "센텀", 명지캠퍼스: "명지", 공동: "공동", "본사 공통": "공동" };
+/** 예전 '본사 공통'도 '공동'으로 센다 */
+const branchOf = (b: string) => (b === "본사 공통" ? "공동" : b);
+/** 진행 중 = 완료가 아닌 모든 건 (지연 포함) — 위 상태판과 아래 캠퍼스 현황이 같은 기준 */
+const isOpen = (s: RequestStatus) => s !== "completed";
 const statusLabels: Record<RequestStatus, string> = { approval_pending: "승인 대기", producing: "제작 중", reviewing: "컨펌 중", delayed: "지연", completed: "완료" };
 const statusOrder: RequestStatus[] = ["approval_pending", "producing", "reviewing", "delayed", "completed"];
 const statusProgress: Record<RequestStatus, number> = { approval_pending: 10, producing: 45, reviewing: 80, delayed: 60, completed: 100 };
@@ -62,7 +68,7 @@ function todayStr() { return new Date(Date.now() - new Date().getTimezoneOffset(
 function defaultPriority(key: string) {
   const [year, month] = key.split("-").map(Number);
   const diff = (year - 2026) * 12 + month - 9;
-  return campuses[((diff % campuses.length) + campuses.length) % campuses.length];
+  return ROTATION[((diff % ROTATION.length) + ROTATION.length) % ROTATION.length];
 }
 function effectiveDue(item: ProductionRequest) { return item.revisedDueDate || item.desiredDate; }
 function dotted(date: string) { return (date || "").slice(0, 10).replaceAll("-", "."); }
@@ -77,6 +83,13 @@ function stamp(iso?: string) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 function myCampus() { const me = getMe(); return me && me.campus !== "전체" ? `${me.campus}캠퍼스` : campuses[0]; }
+async function uploadImage(file: File) {
+  const upload = new FormData(); upload.set("file", file); upload.set("purpose", "preview");
+  const response = await fetch("/api/uploads", { method: "POST", body: upload });
+  const result = await response.json() as { key?: string; name?: string; error?: string };
+  if (!response.ok || !result.key) throw new Error(result.error ?? "이미지를 올리지 못했습니다.");
+  return { key: result.key, name: result.name ?? file.name };
+}
 function myName() { const me = getMe(); return me ? `${me.name}${me.title ? " " + me.title : ""}` : ""; }
 
 export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: { role: Role; demoMode: boolean; onOpenMarketing: (assetId?: string) => void }) {
@@ -98,7 +111,8 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
   const [saving, setSaving] = useState(false);
   const [managed, setManaged] = useState<ProductionRequest | null>(null);
   const [scheduleDraft, setScheduleDraft] = useState<ProductionSchedule | null>(null);
-  const canManage = role === "admin" || demoMode;
+  const [completing, setCompleting] = useState<ProductionRequest | null>(null);
+  const canManage = role === "admin" || getMe()?.title === "제작실장" || demoMode;
   const selectedMonthKey = monthKey(monthCursor);
   const currentPriority = overrides.find((item) => item.monthKey === selectedMonthKey)?.branch ?? defaultPriority(selectedMonthKey);
 
@@ -115,14 +129,24 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
     }).catch(() => toast.error("제작 요청을 불러오지 못했습니다.")).finally(() => setLoading(false));
   }, [demoMode]);
 
+  // 알림에서 특정 요청 바로 열기
+  useEffect(() => {
+    if (loading) return;
+    const open = (id: string | null) => { const hit = id ? requests.find((r) => r.id === id) : null; if (hit) { setManaged({ ...hit }); try { sessionStorage.removeItem("archive-open"); } catch { /* 무시 */ } } };
+    try { open(sessionStorage.getItem("archive-open")); } catch { /* 무시 */ }
+    const onEvent = (event: Event) => open(String((event as CustomEvent).detail ?? ""));
+    window.addEventListener("archive-open", onEvent);
+    return () => window.removeEventListener("archive-open", onEvent);
+  }, [loading, requests]);
+
   const counts = useMemo(() => {
-    const scoped = requests.filter((item) => branchFilter === "all" || item.branch === branchFilter);
+    const scoped = requests.filter((item) => branchFilter === "all" || branchOf(item.branch) === branchFilter);
     const by = Object.fromEntries(statusOrder.map((status) => [status, scoped.filter((item) => item.status === status).length])) as Record<RequestStatus, number>;
-    return { ...by, open: scoped.filter((item) => item.status !== "completed").length, all: scoped.length };
+    return { ...by, open: scoped.filter((item) => isOpen(item.status)).length, all: scoped.length };
   }, [requests, branchFilter]);
 
   const listed = useMemo(() => {
-    const rows = requests.filter((item) => (branchFilter === "all" || item.branch === branchFilter) && (statusFilter === "all" ? true : statusFilter === "open" ? item.status !== "completed" : item.status === statusFilter));
+    const rows = requests.filter((item) => (branchFilter === "all" || branchOf(item.branch) === branchFilter) && (statusFilter === "all" ? true : statusFilter === "open" ? isOpen(item.status) : item.status === statusFilter));
     return rows.sort((a, b) => {
       if (statusFilter === "open") {
         const rank = (s: RequestStatus) => (s === "delayed" ? 0 : s === "approval_pending" ? 1 : 2);
@@ -133,11 +157,11 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
   }, [requests, branchFilter, statusFilter]);
 
   const campusSummary = campuses.map((campus) => {
-    const campusItems = requests.filter((item) => item.branch === campus);
+    const campusItems = requests.filter((item) => branchOf(item.branch) === campus);
     return {
       campus,
       requested: campusItems.filter((item) => item.requestedDate.startsWith(selectedMonthKey)).length,
-      producing: campusItems.filter((item) => ["approval_pending", "producing", "reviewing"].includes(item.status)).length,
+      producing: campusItems.filter((item) => isOpen(item.status)).length,
       completed: campusItems.filter((item) => item.status === "completed" && effectiveDue(item).startsWith(selectedMonthKey)).length,
       delayed: campusItems.filter((item) => item.status === "delayed").length,
     };
@@ -183,6 +207,8 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
     const next = { ...merged, progressPercent: merged.status === "completed" ? 100 : merged.progressPercent };
     if (!next.assignee.trim() && next.status !== "approval_pending") return toast.error("제작 담당자를 입력해 주세요.");
     if (next.status === "delayed" && (!next.delayedReason.trim() || !next.revisedDueDate)) return toast.error("지연 사유와 변경 완료일을 입력해 주세요.");
+    // 완료는 완료 창에서 (결과 이미지 → 마케팅 제작물 + 드라이브)
+    if (next.status === "completed" && original?.status !== "completed" && !demoMode && !managed.demo) { setCompleting(next); return; }
     setSaving(true);
     try {
       if (!demoMode && !managed.demo) {
@@ -199,14 +225,63 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
   }
 
   async function deleteRequest() {
-    if (!managed || !canManage) return;
+    if (!managed) return;
     setSaving(true);
     try {
       if (!demoMode && !managed.demo) {
         const response = await fetch(`/api/production-requests/${managed.id}`, { method: "DELETE" });
-        if (!response.ok) throw new Error("요청을 삭제하지 못했습니다.");
+        if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "요청을 삭제하지 못했습니다.");
       }
       setRequests((current) => current.filter((item) => item.id !== managed.id)); setManaged(null); toast.success("요청을 삭제했습니다.");
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setSaving(false); }
+  }
+
+  // 요청자 본인 수정 ('승인 대기'일 때)
+  async function editOwn(patch: Partial<ProductionRequest>) {
+    if (!managed) return;
+    setSaving(true);
+    try {
+      const response = await fetch(`/api/production-requests/${managed.id}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...managed, ...patch }) });
+      const data = await response.json().catch(() => ({})) as Partial<ProductionRequest> & { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "요청을 고치지 못했습니다.");
+      const next = { ...managed, ...patch, ...data } as ProductionRequest;
+      setRequests((current) => current.map((item) => item.id === next.id ? next : item)); setManaged(next); toast.success("요청을 고쳤어요.");
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setSaving(false); }
+  }
+  // 진행 이미지 올리기 (관리자·제작실장)
+  async function addProgress(files: File[], caption: string) {
+    if (!managed || !canManage || !files.length) return;
+    setSaving(true);
+    try {
+      const me = getMe(); const by = me ? `${me.name}${me.title ? " " + me.title : ""}` : "";
+      const added: ProgressImage[] = [];
+      for (const file of files.slice(0, 10)) {
+        if (demoMode || managed.demo) { added.push({ key: crypto.randomUUID(), src: URL.createObjectURL(file), name: file.name, caption, at: new Date().toISOString(), by }); continue; }
+        const up = await uploadImage(file);
+        added.push({ ...up, caption, at: new Date().toISOString(), by, src: fileUrl(up.key) });
+      }
+      const list = [...(managed.progressImages ?? []), ...added];
+      if (!demoMode && !managed.demo) {
+        const response = await fetch(`/api/production-requests/${managed.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ progressImages: list.map(({ src: _src, ...rest }) => rest) }) });
+        if (!response.ok) throw new Error(((await response.json().catch(() => ({}))) as { error?: string }).error ?? "진행 이미지를 저장하지 못했습니다.");
+      }
+      const next = { ...managed, progressImages: list, updatedAt: new Date().toISOString() };
+      setRequests((current) => current.map((item) => item.id === next.id ? next : item)); setManaged(next);
+      toast.success(`진행 이미지 ${added.length}장을 올렸어요. 요청자에게 알림이 가요.`);
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setSaving(false); }
+  }
+  async function deleteSchedule() {
+    if (!scheduleDraft || !canManage) return;
+    setSaving(true);
+    try {
+      if (!demoMode && !scheduleDraft.demo) {
+        const response = await fetch(`/api/production-schedules/${scheduleDraft.id}`, { method: "DELETE" });
+        if (!response.ok) throw new Error("일정을 삭제하지 못했습니다.");
+      }
+      setSchedules((items) => items.filter((item) => item.id !== scheduleDraft.id)); setScheduleDraft(null); toast.success("일정을 삭제했어요.");
     } catch (error) { toast.error((error as Error).message); }
     finally { setSaving(false); }
   }
@@ -243,7 +318,7 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
 
   function openNewSchedule(date: string) {
     if (!canManage) return;
-    setScheduleDraft({ id: crypto.randomUUID(), title: "", branch: "본사 공통", scheduleDate: date, assetType: "", manager: "행정마케팅파트", status: "approval_pending", notes: "", delayedReason: "", revisedDueDate: "", linkedRequestId: null, demo: demoMode });
+    setScheduleDraft({ id: crypto.randomUUID(), title: "", branch: "공동", scheduleDate: date, assetType: "", manager: "행정마케팅파트", status: "approval_pending", notes: "", delayedReason: "", revisedDueDate: "", linkedRequestId: null, demo: demoMode });
   }
 
   const boardItems: { key: StatusFilter; label: string; count: number; tone: string }[] = [
@@ -289,17 +364,17 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
       </div>
     </CardContent></Card>
 
-    <ProductionScheduleView monthCursor={monthCursor} setMonthCursor={setMonthCursor} selectedDate={selectedDate} setSelectedDate={setSelectedDate} schedules={schedules} requests={requests} priority={currentPriority} canManage={canManage} onPriority={savePriority} onOpenSchedule={(item) => setScheduleDraft({ ...item })} onOpenRequest={(item) => setManaged({ ...item })} onNewSchedule={openNewSchedule} />
+    <ProductionScheduleView monthCursor={monthCursor} setMonthCursor={setMonthCursor} selectedDate={selectedDate} setSelectedDate={setSelectedDate} schedules={schedules.filter((item) => item.status !== "completed")} requests={requests.filter((item) => isOpen(item.status))} priority={currentPriority} canManage={canManage} onPriority={savePriority} onOpenSchedule={(item) => setScheduleDraft({ ...item })} onOpenRequest={(item) => setManaged({ ...item })} onNewSchedule={openNewSchedule} />
 
     {/* 캠퍼스별 현황 */}
     <Card className="rounded-2xl py-0"><CardContent className="p-4 md:p-5">
       <h2 className="font-semibold">{selectedMonthKey.replace("-", "년 ")}월 캠퍼스별 현황</h2>
-      <p className="mt-1 text-sm text-muted-foreground">카드를 누르면 위 목록이 그 캠퍼스 요청만 보여줍니다.</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">{campusSummary.map((item) => <button key={item.campus} type="button" onClick={() => { setBranchFilter(item.campus); setStatusFilter("all"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={`rounded-xl border p-3 text-left hover:bg-muted/40 ${branchFilter === item.campus ? "border-primary bg-primary/5" : ""}`}>
-        <span className="flex items-center gap-1.5 font-semibold"><CampusDot branch={item.campus} />{short[item.campus]}캠퍼스</span>
+      <p className="mt-1 text-sm text-muted-foreground">카드를 누르면 위 목록이 그 캠퍼스 요청만 보여줍니다. '진행 중'은 완료 전 모든 건(지연 포함)이라 네 칸을 더하면 위 '진행 중 전체'와 같아요.</p>
+      <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-4">{campusSummary.map((item) => <button key={item.campus} type="button" onClick={() => { setBranchFilter(item.campus); setStatusFilter("all"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={`rounded-xl border p-3 text-left hover:bg-muted/40 ${branchFilter === item.campus ? "border-primary bg-primary/5" : ""}`}>
+        <span className="flex items-center gap-1.5 font-semibold"><CampusDot branch={item.campus} />{item.campus === "공동" ? "공동 작업" : `${short[item.campus]}캠퍼스`}</span>
         <span className="mt-2 grid grid-cols-4 gap-1 text-center text-[12px] text-muted-foreground">
           <span><b className="block text-base text-foreground tabular-nums">{item.requested}</b>이달 요청</span>
-          <span><b className="block text-base text-foreground tabular-nums">{item.producing}</b>진행</span>
+          <span><b className="block text-base text-foreground tabular-nums">{item.producing}</b>진행 중</span>
           <span><b className="block text-base text-foreground tabular-nums">{item.completed}</b>완료</span>
           <span><b className={`block text-base tabular-nums ${item.delayed ? "text-rose-600" : "text-foreground"}`}>{item.delayed}</b>지연</span>
         </span>
@@ -310,7 +385,7 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
       <form className="space-y-4" onSubmit={submit}>
         <div className="grid gap-4 sm:grid-cols-2">
           <RequestField label="제작물 제목" name="title" placeholder="예: 겨울특강 모집 현수막" required />
-          <RequestSelect label="캠퍼스" name="branch" items={campuses.map((value) => [value, value])} defaultValue={myCampus()} />
+          <RequestSelect label="캠퍼스" name="branch" items={campuses.map((value) => [value, value === "공동" ? "공동 작업 (여러 캠퍼스)" : value])} defaultValue={myCampus()} />
           <RequestField label="요청자" name="requester" defaultValue={myName()} placeholder="원장명 또는 담당자" required />
           <RequestField label="제작물 종류" name="assetType" placeholder="현수막, 배너, 카드뉴스" required />
           <RequestField label="희망 완료일" name="desiredDate" type="date" min={todayStr()} required />
@@ -332,8 +407,14 @@ export function ProductionRequestsSection({ role, demoMode, onOpenMarketing }: {
     </DialogContent></Dialog>
 
     <MarketingPicker open={pickerOpen} onOpenChange={setPickerOpen} max={Math.max(0, 10 - files.length)} picked={picked} onDone={setPicked} />
-    <RequestDialog item={managed} setItem={setManaged} canManage={canManage} saving={saving} onSave={saveWorkflow} onDelete={deleteRequest} onOpenMarketing={onOpenMarketing} />
-    <ScheduleDialog item={scheduleDraft} setItem={setScheduleDraft} canManage={canManage} saving={saving} onSave={saveSchedule} />
+    <RequestDialog item={managed} setItem={setManaged} canManage={canManage} saving={saving} onSave={saveWorkflow} onDelete={deleteRequest} onOpenMarketing={onOpenMarketing} onEditOwn={editOwn} onAddProgress={addProgress} onComplete={(item) => setCompleting(item)} />
+    <ScheduleDialog item={scheduleDraft} setItem={setScheduleDraft} canManage={canManage} saving={saving} onSave={saveSchedule} onDelete={deleteSchedule} exists={!!scheduleDraft && schedules.some((s) => s.id === scheduleDraft.id)} />
+    <CompleteDialog item={completing} onClose={() => setCompleting(null)} onDone={(updated, assetId) => {
+      setRequests((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setSchedules((items) => items.map((s) => s.linkedRequestId === updated.id ? { ...s, status: "completed" } : s));
+      setCompleting(null); setManaged(null);
+      if (assetId) onOpenMarketing(assetId);
+    }} />
   </div>;
 }
 
@@ -368,8 +449,8 @@ function ProductionScheduleView({ monthCursor, setMonthCursor, selectedDate, set
   const [sy, sm, sd] = selectedDate.split("-").map(Number);
   return <Card className="overflow-hidden rounded-2xl py-0"><CardContent className="p-4 md:p-5">
     <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      <div><div className="flex items-center gap-2"><CalendarDays className="size-5 text-primary" /><h2 className="font-semibold">주요 일정</h2></div><p className="mt-1 text-sm text-muted-foreground">날짜를 누르면 그날 일정과 마감 요청을 아래에서 볼 수 있어요.{canManage ? " 일정 추가·수정은 관리자만 가능합니다." : ""}</p></div>
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/35 px-3 py-2"><span className="text-sm text-muted-foreground">이번 달 우선 캠퍼스</span>{canManage ? <Select value={priority} onValueChange={onPriority}><SelectTrigger className="h-8 w-24 bg-background"><SelectValue /></SelectTrigger><SelectContent>{campuses.map((campus) => <SelectItem key={campus} value={campus}>{short[campus]}</SelectItem>)}</SelectContent></Select> : <Badge>{short[priority]}</Badge>}<span className="flex items-center gap-1.5 text-xs text-muted-foreground"><CampusDot branch="김해" />김해→<CampusDot branch="센텀" />센텀→<CampusDot branch="명지" />명지 순환</span></div>
+      <div><div className="flex items-center gap-2"><CalendarDays className="size-5 text-primary" /><h2 className="font-semibold">주요 일정</h2></div><p className="mt-1 text-sm text-muted-foreground">날짜를 누르면 그날 일정과 마감 요청을 아래에서 볼 수 있어요. 완료된 건은 달력에서 빠지고 '완료' 목록에 남아요.{canManage ? " 일정을 누르면 수정·삭제할 수 있어요." : ""}</p></div>
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/35 px-3 py-2"><span className="text-sm text-muted-foreground">이번 달 우선 캠퍼스</span>{canManage ? <Select value={priority} onValueChange={onPriority}><SelectTrigger className="h-8 w-24 bg-background"><SelectValue /></SelectTrigger><SelectContent>{ROTATION.map((campus) => <SelectItem key={campus} value={campus}>{short[campus]}</SelectItem>)}</SelectContent></Select> : <Badge>{short[priority]}</Badge>}<span className="flex items-center gap-1.5 text-xs text-muted-foreground"><CampusDot branch="김해" />김해→<CampusDot branch="센텀" />센텀→<CampusDot branch="명지" />명지 순환</span></div>
     </div>
     <Tabs defaultValue="monthly"><TabsList><TabsTrigger value="monthly">월간</TabsTrigger><TabsTrigger value="annual">연간</TabsTrigger></TabsList>
       <TabsContent value="monthly" className="mt-3">
@@ -411,17 +492,23 @@ function ProductionScheduleView({ monthCursor, setMonthCursor, selectedDate, set
 
 const flowSteps: RequestStatus[] = ["approval_pending", "producing", "reviewing", "completed"];
 
-function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onOpenMarketing }: { item: ProductionRequest | null; setItem: (item: ProductionRequest | null) => void; canManage: boolean; saving: boolean; onSave: (override?: Partial<ProductionRequest>) => void; onDelete: () => void; onOpenMarketing: (assetId?: string) => void }) {
+function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onOpenMarketing, onEditOwn, onAddProgress, onComplete }: { item: ProductionRequest | null; setItem: (item: ProductionRequest | null) => void; canManage: boolean; saving: boolean; onSave: (override?: Partial<ProductionRequest>) => void; onDelete: () => void; onOpenMarketing: (assetId?: string) => void; onEditOwn: (patch: Partial<ProductionRequest>) => void; onAddProgress: (files: File[], caption: string) => void; onComplete: (item: ProductionRequest) => void }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  useEffect(() => { setConfirmDelete(false); if (item && !item.demo) void markRead("productionRequests", item.id); }, [item?.id]);
+  const [editing, setEditing] = useState<Partial<ProductionRequest> | null>(null);
+  const [caption, setCaption] = useState("");
+  const [viewer, setViewer] = useState<ProgressImage | null>(null);
+  useEffect(() => { setConfirmDelete(false); setEditing(null); setCaption(""); if (item && !item.demo) void markRead("productionRequests", item.id); }, [item?.id]);
   if (!item) return null;
   const due = effectiveDue(item);
+  const mine = !!item.createdById && item.createdById === getMe()?.id;
+  const ownPending = mine && item.status === "approval_pending" && !canManage;
   const stepIndex = item.status === "delayed" ? 1 : flowSteps.indexOf(item.status);
   const quick: { label: string; status: RequestStatus; progress: number } | null = item.status === "approval_pending" ? { label: "승인하고 제작 시작", status: "producing", progress: 45 }
     : item.status === "producing" || item.status === "delayed" ? { label: "시안 완료 · 컨펌 요청", status: "reviewing", progress: 80 }
     : item.status === "reviewing" ? { label: "최종 완료 처리", status: "completed", progress: 100 } : null;
+  const progress = item.progressImages ?? [];
   return <Dialog open onOpenChange={(open) => !open && setItem(null)}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
-    <DialogHeader className="text-left"><DialogTitle className="pr-6 leading-7">{item.title}</DialogTitle>{!item.demo && <div><ReadBadge collection="productionRequests" id={item.id} /></div>}<DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="inline-flex items-center gap-1"><CampusDot branch={item.branch} />{item.branch}</span><span>· 요청 {dotted(item.requestedDate)}</span><span>· 마감 {dotted(due)} {item.status !== "completed" && <b className="text-foreground">{dday(due)}</b>}</span></DialogDescription></DialogHeader>
+    <DialogHeader className="text-left"><DialogTitle className="pr-6 leading-7">{item.title}</DialogTitle>{!item.demo && <div><ReadBadge collection="productionRequests" id={item.id} /></div>}<DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1"><span className="inline-flex items-center gap-1"><CampusDot branch={item.branch} />{branchOf(item.branch) === "공동" ? "공동 작업" : item.branch}</span><span>· 요청 {dotted(item.requestedDate)}</span><span>· 마감 {dotted(due)} {item.status !== "completed" && <b className="text-foreground">{dday(due)}</b>}</span></DialogDescription></DialogHeader>
 
     {/* 진행 단계 */}
     <div className="rounded-xl border p-3">
@@ -430,39 +517,141 @@ function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onO
       {item.status === "delayed" && <p className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-800 dark:bg-rose-950/40 dark:text-rose-200">지연 사유: {item.delayedReason || "-"} · 변경 완료일 {dotted(item.revisedDueDate)}</p>}
     </div>
 
+    {/* 진행 이미지 */}
+    {(progress.length > 0 || (canManage && item.status !== "completed")) && <div className="rounded-xl border p-3">
+      <p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Images className="size-4" />진행 이미지 {progress.length > 0 && <span className="font-normal text-muted-foreground">{progress.length}장</span>}</p>
+      {progress.length > 0 ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{[...progress].reverse().map((p, index) => <button key={`${p.key}-${index}`} type="button" onClick={() => setViewer(p)} className="group overflow-hidden rounded-lg border bg-muted text-left">
+        <span className="relative block aspect-square">{p.src ? <Image src={p.src} alt={p.caption || p.name || "진행 이미지"} fill unoptimized className="object-cover" /> : null}{index === 0 && <span className="absolute top-1 left-1 rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">최신</span>}</span>
+        <span className="block truncate px-1.5 pt-1 text-[11px] font-medium">{p.caption || p.name || "진행 이미지"}</span>
+        <span className="block truncate px-1.5 pb-1 text-[10px] text-muted-foreground">{stamp(p.at)}{p.by ? ` · ${p.by}` : ""}</span>
+      </button>)}</div> : <p className="text-sm text-muted-foreground">아직 올린 진행 이미지가 없어요.</p>}
+      {canManage && item.status !== "completed" && <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <Input value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="설명 (예: 1차 시안, 문구 수정본)" className="h-11 rounded-xl sm:h-10" maxLength={60} />
+        <label className={`inline-flex h-11 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-xl border border-primary/50 bg-primary/5 px-4 text-sm font-medium text-primary sm:h-10 ${saving ? "pointer-events-none opacity-50" : ""}`}><Upload className="size-4" />이미지 올리기<input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(e) => { const files = Array.from(e.target.files ?? []); e.target.value = ""; if (files.length) { onAddProgress(files, caption.trim()); setCaption(""); } }} /></label>
+      </div>}
+    </div>}
+
     {item.refAssets?.length ? <div className="flex flex-wrap items-center gap-1.5 text-sm"><span className="text-muted-foreground">참고한 제작물</span>{item.refAssets.map((a) => <button key={a.id} type="button" onClick={() => { setItem(null); onOpenMarketing(a.id); }} className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10"><Images className="size-3.5" />{a.title}</button>)}</div> : null}
     {item.referenceImages?.length ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{item.referenceImages.slice(0, 8).map((image, index) => <div key={`${image.src}-${index}`} className="relative aspect-square overflow-hidden rounded-lg bg-muted"><Image src={image.src} alt={image.name ?? "참고 이미지"} fill unoptimized className="object-cover" /></div>)}</div> : null}
-    <dl className="grid gap-3 rounded-xl bg-muted/45 p-4 text-sm sm:grid-cols-2">
+
+    {editing ? <div className="space-y-3 rounded-xl border-2 border-primary/15 p-4">
+      <p className="flex items-center gap-1.5 text-sm font-semibold"><Pencil className="size-4 text-primary" />요청 고치기</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <RequestField label="제작물 제목" name="editTitle" value={editing.title ?? ""} onChange={(e) => setEditing({ ...editing, title: e.target.value })} />
+        <RequestField label="제작물 종류" name="editType" value={editing.assetType ?? ""} onChange={(e) => setEditing({ ...editing, assetType: e.target.value })} />
+        <RequestField label="희망 완료일" name="editDue" type="date" min={todayStr()} value={editing.desiredDate ?? ""} onChange={(e) => setEditing({ ...editing, desiredDate: e.target.value })} />
+        <RequestField label="규격·수량" name="editSpec" value={editing.specifications ?? ""} onChange={(e) => setEditing({ ...editing, specifications: e.target.value })} />
+      </div>
+      <RequestText label="사용 목적과 채널" name="editPurpose" value={editing.purpose ?? ""} onChange={(e) => setEditing({ ...editing, purpose: e.target.value })} />
+      <RequestText label="필수 문구" name="editCopy" value={editing.requiredCopy ?? ""} onChange={(e) => setEditing({ ...editing, requiredCopy: e.target.value })} />
+      <RequestText label="추가 요청사항" name="editNotes" value={editing.notes ?? ""} onChange={(e) => setEditing({ ...editing, notes: e.target.value })} />
+      <div className="flex justify-end gap-2"><Button variant="outline" className="h-10" onClick={() => setEditing(null)}>취소</Button><Button className="h-10" disabled={saving || !editing.title?.trim() || !editing.desiredDate} onClick={() => { onEditOwn(editing); setEditing(null); }}>{saving ? <LoaderCircle className="animate-spin" /> : <CheckCircle2 />}고친 내용 저장</Button></div>
+    </div> : <dl className="grid gap-3 rounded-xl bg-muted/45 p-4 text-sm sm:grid-cols-2">
       <Info label="제작물" value={`${item.assetType} · ${item.specifications || "규격 미입력"}`} />
       <Info label="요청자" value={item.requester} />
       <Info label="사용 목적" value={item.purpose} wide />
       <Info label="필수 문구" value={item.requiredCopy} wide />
       {item.notes && <Info label={canManage ? "메모" : "추가 요청사항·메모"} value={item.notes} wide />}
-    </dl>
+    </dl>}
 
     {/* 처리 기록 */}
     {item.history?.length ? <div><p className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Clock3 className="size-4" />처리 기록</p><ol className="space-y-1.5 border-l-2 border-border pl-3">{item.history.map((h, index) => <li key={index} className="relative text-sm"><span className={`absolute top-1.5 -left-[17px] size-2.5 rounded-full ${statusBar[h.status] ?? "bg-muted"}`} /><b>{statusLabels[h.status] ?? h.status}</b> <span className="text-muted-foreground">· {stamp(h.at)}{h.by ? ` · ${h.by}` : ""}{h.note ? ` · ${h.note}` : ""}</span></li>)}</ol></div> : null}
 
     {canManage ? <div className="space-y-4 rounded-xl border-2 border-primary/15 p-4">
       <p className="flex items-center gap-1.5 text-sm font-semibold"><ShieldCheck className="size-4 text-primary" />관리자 처리</p>
-      {quick && <Button type="button" className="h-11 w-full rounded-xl" disabled={saving} onClick={() => onSave({ status: quick.status, progressPercent: Math.max(item.progressPercent, quick.progress) })}><CheckCircle2 />{quick.label}</Button>}
-      {quick && <p className="-mt-2 text-center text-xs text-muted-foreground">또는 아래에서 단계·담당자·작업률을 직접 바꾸고 저장하세요.</p>}
+      {quick && <Button type="button" className="h-11 w-full rounded-xl" disabled={saving} onClick={() => quick.status === "completed" && !item.demo ? onComplete({ ...item }) : onSave({ status: quick.status, progressPercent: Math.max(item.progressPercent, quick.progress) })}><CheckCircle2 />{quick.label}</Button>}
+      {quick && <p className="-mt-2 text-center text-xs text-muted-foreground">{quick.status === "completed" ? "완료 창에서 결과 이미지를 올리면 마케팅 제작물과 구글 드라이브에 자동으로 들어가요." : "또는 아래에서 단계·담당자·작업률을 직접 바꾸고 저장하세요."}</p>}
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2"><Label>진행 단계</Label><Select value={item.status} onValueChange={(value) => { const status = value as RequestStatus; setItem({ ...item, status, progressPercent: status === "completed" ? 100 : Math.max(item.progressPercent, statusProgress[status]) }); }}><SelectTrigger className="h-11 sm:h-9"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(statusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
         <RequestField label="제작 담당자" name="assignee" value={item.assignee} placeholder="예: 제작실장" onChange={(event) => setItem({ ...item, assignee: event.target.value })} />
       </div>
       <div className="space-y-3"><div className="flex justify-between text-sm"><Label>작업률</Label><b>{item.progressPercent}%</b></div><Slider value={[item.progressPercent]} max={100} step={5} onValueChange={(value) => setItem({ ...item, progressPercent: value[0] ?? 0 })} /></div>
       {item.status === "delayed" && <div className="grid gap-4 sm:grid-cols-2"><RequestField label="변경 완료일" name="revisedDueDate" type="date" value={item.revisedDueDate} onChange={(event) => setItem({ ...item, revisedDueDate: event.target.value })} /><RequestField label="지연 사유" name="delayedReason" value={item.delayedReason} onChange={(event) => setItem({ ...item, delayedReason: event.target.value })} /></div>}
-      <RequestField label="Google Drive 완성본 링크" name="driveUrl" type="url" value={item.driveUrl} onChange={(event) => setItem({ ...item, driveUrl: event.target.value })} />
+      <RequestField label="Google Drive 완성본 링크" name="driveUrl" type="url" value={item.driveUrl} placeholder="완료 처리하면 자동으로 채워져요" onChange={(event) => setItem({ ...item, driveUrl: event.target.value })} />
       <RequestText label="메모" name="notes" value={item.notes} onChange={(event) => setItem({ ...item, notes: event.target.value })} />
       <div className="flex justify-end"><Button type="button" variant="ghost" size="sm" className={confirmDelete ? "text-rose-600" : "text-muted-foreground"} disabled={saving} onClick={() => { if (confirmDelete) onDelete(); else setConfirmDelete(true); }}><Trash2 className="size-4" />{confirmDelete ? "한 번 더 누르면 삭제돼요" : "요청 삭제"}</Button></div>
-    </div> : <p className="flex items-center gap-1.5 rounded-xl bg-muted/45 px-3 py-2.5 text-sm text-muted-foreground"><Lock className="size-4 shrink-0" />승인과 진행 상태 변경은 관리자만 할 수 있어요.</p>}
+    </div> : ownPending ? <div className="flex flex-wrap items-center gap-2 rounded-xl bg-muted/45 px-3 py-2.5 text-sm text-muted-foreground">
+      <span className="flex-1">내 요청이에요. 승인 전이라 고치거나 지울 수 있어요.</span>
+      {!editing && <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => setEditing({ title: item.title, assetType: item.assetType, desiredDate: item.desiredDate, specifications: item.specifications, purpose: item.purpose, requiredCopy: item.requiredCopy, notes: item.notes })}><Pencil className="size-4" />고치기</Button>}
+      <Button type="button" variant="ghost" size="sm" className={`h-9 ${confirmDelete ? "text-rose-600" : ""}`} disabled={saving} onClick={() => { if (confirmDelete) onDelete(); else setConfirmDelete(true); }}><Trash2 className="size-4" />{confirmDelete ? "한 번 더 누르면 삭제" : "지우기"}</Button>
+    </div> : <p className="flex items-center gap-1.5 rounded-xl bg-muted/45 px-3 py-2.5 text-sm text-muted-foreground"><Lock className="size-4 shrink-0" />{mine ? "승인된 뒤에는 관리자·제작실장만 바꿀 수 있어요." : "승인과 진행 상태 변경은 관리자·제작실장만 할 수 있어요."}</p>}
 
     <DialogFooter className="gap-2">
       <Button variant="outline" className="h-11 sm:h-10" onClick={() => setItem(null)}>닫기</Button>
       {item.driveUrl && /^https?:\/\//.test(item.driveUrl) && <Button variant="outline" className="h-11 sm:h-10" asChild><a href={item.driveUrl} target="_blank" rel="noreferrer"><ExternalLink />Drive</a></Button>}
-      {item.status === "completed" && <Button variant="outline" className="h-11 sm:h-10" onClick={() => onOpenMarketing()}><FileText />제작물 보기</Button>}
+      {item.status === "completed" && <Button variant="outline" className="h-11 sm:h-10" onClick={() => { setItem(null); onOpenMarketing(item.resultAssetId ?? undefined); }}><FileText />제작물 보기</Button>}
       {canManage && <Button className="h-11 sm:h-10" onClick={() => onSave()} disabled={saving}>{saving && <LoaderCircle className="animate-spin" />}저장</Button>}
+    </DialogFooter>
+    {viewer && <Dialog open onOpenChange={(open) => !open && setViewer(null)}><DialogContent className="sm:max-w-3xl"><DialogHeader className="text-left"><DialogTitle>{viewer.caption || viewer.name || "진행 이미지"}</DialogTitle><DialogDescription>{stamp(viewer.at)}{viewer.by ? ` · ${viewer.by}` : ""}</DialogDescription></DialogHeader>{viewer.src && <img src={viewer.src} alt={viewer.caption || "진행 이미지"} className="max-h-[70vh] w-full rounded-lg object-contain" />}</DialogContent></Dialog>}
+  </DialogContent></Dialog>;
+}
+
+type DoneImage = { id: string; key?: string; file?: File; src: string; name: string; caption: string; pick: boolean };
+function CompleteDialog({ item, onClose, onDone }: { item: ProductionRequest | null; onClose: () => void; onDone: (updated: ProductionRequest, assetId: string | null) => void }) {
+  const [images, setImages] = useState<DoneImage[]>([]);
+  const [title, setTitle] = useState(""); const [assetType, setAssetType] = useState(""); const [channel, setChannel] = useState(""); const [notes, setNotes] = useState("");
+  const [toMarketing, setToMarketing] = useState(true); const [toDrive, setToDrive] = useState(true);
+  const [busy, setBusy] = useState("");
+  useEffect(() => {
+    if (!item) return;
+    setTitle(item.title); setAssetType(item.assetType); setChannel(""); setNotes(item.purpose || ""); setToMarketing(true); setToDrive(true); setBusy("");
+    // 진행 이미지 중 가장 최근 것들을 기본 후보로 (선택은 직접)
+    setImages((item.progressImages ?? []).filter((p) => p.src).map((p, i) => ({ id: `p${i}`, key: p.key, src: p.src!, name: p.name || `진행 이미지 ${i + 1}`, caption: p.caption || "", pick: false })));
+  }, [item?.id]);
+  if (!item) return null;
+  const picked = images.filter((i) => i.pick);
+  async function submit() {
+    if (!item) return;
+    if ((toMarketing || toDrive) && !picked.length) return toast.error("결과 이미지를 한 장 이상 골라 주세요. (이미지 없이 완료하려면 두 체크를 끄세요)");
+    setBusy("upload");
+    try {
+      const done: { key: string; name: string; caption: string }[] = [];
+      for (const img of picked) {
+        if (img.key) done.push({ key: img.key, name: img.name, caption: img.caption });
+        else if (img.file) { const up = await uploadImage(img.file); done.push({ key: up.key, name: up.name, caption: img.caption }); }
+      }
+      setBusy("save");
+      const response = await fetch("/api/production-complete", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: item.id, images: done, title, assetType, branch: item.branch, channel, notes, toMarketing, toDrive }) });
+      const data = await response.json().catch(() => ({})) as { ok?: boolean; msg?: string; error?: string; assetId?: string | null; drive?: { ok: boolean; url: string | null; reason?: string } };
+      if (!response.ok || !data.ok) throw new Error(data.msg ?? data.error ?? "완료 처리하지 못했습니다.");
+      const at = new Date().toISOString();
+      const updated: ProductionRequest = { ...item, status: "completed", progressPercent: 100, completedAt: at, updatedAt: at, resultAssetId: data.assetId ?? item.resultAssetId, driveUrl: data.drive?.url ?? item.driveUrl, history: [...(item.history ?? []), { status: "completed", at, by: myName(), note: done.length ? `완료 이미지 ${done.length}장` : "완료" }] };
+      toast.success(data.assetId && toMarketing ? "완료! 마케팅 제작물에 올렸어요 🎉" : "완료 처리했어요 🎉");
+      if (toDrive && done.length) { if (data.drive?.ok) toast.success("구글 드라이브에도 저장했어요."); else toast.warning("구글 드라이브 저장은 실패했어요. (Apps Script 업데이트가 필요할 수 있어요) 이미지는 사이트에 잘 저장됐어요."); }
+      onDone(updated, toMarketing && data.assetId ? data.assetId : null);
+    } catch (error) { toast.error((error as Error).message); }
+    finally { setBusy(""); }
+  }
+  return <Dialog open onOpenChange={(open) => !open && !busy && onClose()}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
+    <DialogHeader className="text-left"><DialogTitle>🎉 제작 완료 처리</DialogTitle><DialogDescription>결과 이미지를 고르면 마케팅 제작물로 자동 등록되고 구글 드라이브에도 저장돼요. 완료된 건은 달력에서 빠지고 '완료' 목록에 남아요.</DialogDescription></DialogHeader>
+    <div className="space-y-2">
+      <Label>결과 이미지 <span className="font-normal text-muted-foreground">(눌러서 고르기 · {picked.length}장 선택)</span></Label>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+        {images.map((img) => <div key={img.id} className={`overflow-hidden rounded-xl border-2 ${img.pick ? "border-primary" : "border-transparent"} bg-muted`}>
+          <button type="button" onClick={() => setImages((list) => list.map((i) => i.id === img.id ? { ...i, pick: !i.pick } : i))} className="relative block aspect-square w-full" aria-pressed={img.pick} aria-label={img.name}>
+            <img src={img.src} alt="" className="h-full w-full object-cover" />
+            <span className={`absolute top-1.5 right-1.5 grid size-6 place-items-center rounded-full border-2 ${img.pick ? "border-primary bg-primary text-primary-foreground" : "border-white bg-black/30 text-transparent"}`}><CheckCircle2 className="size-3.5" /></span>
+          </button>
+          {img.pick && <input value={img.caption} onChange={(e) => setImages((list) => list.map((i) => i.id === img.id ? { ...i, caption: e.target.value } : i))} placeholder="이름 (예: 시안 1)" maxLength={40} className="w-full border-t bg-background px-1.5 py-1 text-xs outline-none" />}
+        </div>)}
+        <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed text-center text-xs text-muted-foreground"><ImagePlus className="mb-1 size-5" />완성본 올리기<input type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(e) => { const files = Array.from(e.target.files ?? []).slice(0, 20); e.target.value = ""; setImages((list) => [...list, ...files.map((file, n) => ({ id: crypto.randomUUID(), file, src: URL.createObjectURL(file), name: file.name, caption: `시안 ${list.filter((i) => i.pick).length + n + 1}`, pick: true }))]); }} /></label>
+      </div>
+      {images.some((i) => i.key) && <p className="text-xs text-muted-foreground">위에 보이는 건 그동안 올린 진행 이미지예요. 최종본만 골라 주세요.</p>}
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2">
+      <RequestField label="제작물 이름" name="doneTitle" value={title} onChange={(e) => setTitle(e.target.value)} />
+      <RequestField label="종류" name="doneType" value={assetType} onChange={(e) => setAssetType(e.target.value)} />
+      <RequestField label="사용 채널 (선택)" name="doneChannel" value={channel} placeholder="예: 인스타그램, 현수막" onChange={(e) => setChannel(e.target.value)} />
+      <div className="space-y-2"><Label>캠퍼스</Label><p className="flex h-11 items-center gap-1.5 rounded-xl border bg-muted/40 px-3 text-sm sm:h-9"><CampusDot branch={item.branch} />{branchOf(item.branch) === "공동" ? "공동 작업" : item.branch}</p></div>
+    </div>
+    <RequestText label="설명" name="doneNotes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+    <div className="space-y-2 rounded-xl bg-muted/45 p-3 text-sm">
+      <label className="flex items-center gap-2"><input type="checkbox" checked={toMarketing} onChange={(e) => setToMarketing(e.target.checked)} className="size-4 accent-primary" />마케팅 제작물에 자동 등록 (모두에게 공개)</label>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={toDrive} onChange={(e) => setToDrive(e.target.checked)} className="size-4 accent-primary" />구글 드라이브 '학원 아카이브 제작물' 폴더에 저장</label>
+    </div>
+    <DialogFooter className="gap-2">
+      <Button variant="outline" className="h-11 sm:h-10" disabled={!!busy} onClick={onClose}>취소</Button>
+      <Button className="h-11 sm:h-10" disabled={!!busy} onClick={() => void submit()}>{busy ? <LoaderCircle className="animate-spin" /> : <CheckCircle2 />}{busy === "upload" ? "이미지 올리는 중…" : busy === "save" ? (toDrive ? "드라이브에 저장 중… (최대 1분)" : "저장 중…") : "완료 처리"}</Button>
     </DialogFooter>
   </DialogContent></Dialog>;
 }
@@ -471,15 +660,17 @@ function Info({ label, value, wide }: { label: string; value?: string; wide?: bo
   return <div className={wide ? "sm:col-span-2" : ""}><dt className="text-xs font-semibold text-muted-foreground">{label}</dt><dd className="mt-0.5 whitespace-pre-wrap break-words">{value?.trim() || "미입력"}</dd></div>;
 }
 
-function ScheduleDialog({ item, setItem, canManage, saving, onSave }: { item: ProductionSchedule | null; setItem: (item: ProductionSchedule | null) => void; canManage: boolean; saving: boolean; onSave: () => void }) {
+function ScheduleDialog({ item, setItem, canManage, saving, onSave, onDelete, exists }: { item: ProductionSchedule | null; setItem: (item: ProductionSchedule | null) => void; canManage: boolean; saving: boolean; onSave: () => void; onDelete: () => void; exists: boolean }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  useEffect(() => setConfirmDelete(false), [item?.id]);
   if (!item) return null;
   if (!canManage) return <Dialog open onOpenChange={(open) => !open && setItem(null)}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-lg">
     <DialogHeader className="text-left"><DialogTitle>{item.title}</DialogTitle><DialogDescription>{dotted(item.scheduleDate)} · {item.branch}</DialogDescription></DialogHeader>
     <dl className="grid gap-3 rounded-xl bg-muted/45 p-4 text-sm sm:grid-cols-2"><Info label="상태" value={statusLabels[item.status]} /><Info label="제작물 종류" value={item.assetType} /><Info label="담당자" value={item.manager} />{item.status === "delayed" && <Info label="지연" value={`${item.delayedReason} · 변경일 ${dotted(item.revisedDueDate)}`} />}<Info label="메모" value={item.notes} wide /></dl>
-    <p className="flex items-center gap-1.5 text-sm text-muted-foreground"><Lock className="size-4" />일정 수정은 관리자만 할 수 있어요.</p>
+    <p className="flex items-center gap-1.5 text-sm text-muted-foreground"><Lock className="size-4" />일정 수정·삭제는 관리자·제작실장만 할 수 있어요.</p>
     <DialogFooter><Button variant="outline" className="h-11 sm:h-10" onClick={() => setItem(null)}>닫기</Button></DialogFooter>
   </DialogContent></Dialog>;
-  return <Dialog open onOpenChange={(open) => !open && setItem(null)}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>주요 일정 편집</DialogTitle><DialogDescription>날짜와 진행 상태를 바꾸면 달력에 바로 반영됩니다.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><RequestField label="일정 제목" name="scheduleTitle" value={item.title} onChange={(event) => setItem({ ...item, title: event.target.value })} /><RequestField label="일정 날짜" name="scheduleDate" type="date" value={item.scheduleDate} onChange={(event) => setItem({ ...item, scheduleDate: event.target.value })} /><div className="space-y-2"><Label>캠퍼스</Label><Select value={item.branch} onValueChange={(branch) => setItem({ ...item, branch })}><SelectTrigger className="h-11 sm:h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="본사 공통">본사 공통</SelectItem>{campuses.map((campus) => <SelectItem key={campus} value={campus}>{campus}</SelectItem>)}</SelectContent></Select></div><RequestField label="제작물 종류" name="scheduleAssetType" value={item.assetType} onChange={(event) => setItem({ ...item, assetType: event.target.value })} /><RequestField label="담당자" name="scheduleManager" value={item.manager} onChange={(event) => setItem({ ...item, manager: event.target.value })} /><div className="space-y-2"><Label>상태</Label><Select value={item.status} onValueChange={(status) => setItem({ ...item, status: status as RequestStatus })}><SelectTrigger className="h-11 sm:h-9"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(statusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div></div>{item.status === "delayed" && <div className="grid gap-4 sm:grid-cols-2"><RequestField label="변경 예정일" name="scheduleRevised" type="date" value={item.revisedDueDate} onChange={(event) => setItem({ ...item, revisedDueDate: event.target.value })} /><RequestField label="지연 사유" name="scheduleDelay" value={item.delayedReason} onChange={(event) => setItem({ ...item, delayedReason: event.target.value })} /></div>}<RequestText label="일정 메모" name="scheduleNotes" value={item.notes} onChange={(event) => setItem({ ...item, notes: event.target.value })} /><DialogFooter className="gap-2"><Button variant="outline" className="h-11 sm:h-10" onClick={() => setItem(null)}>취소</Button><Button className="h-11 sm:h-10" onClick={onSave} disabled={saving}>{saving ? <LoaderCircle className="animate-spin" /> : <CheckCircle2 />}일정 저장</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={(open) => !open && setItem(null)}><DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>{exists ? "주요 일정 수정" : "주요 일정 추가"}</DialogTitle><DialogDescription>날짜와 진행 상태를 바꾸면 달력에 바로 반영돼요. 완료로 바꾸면 달력에서 빠져요.</DialogDescription></DialogHeader><div className="grid gap-4 sm:grid-cols-2"><RequestField label="일정 제목" name="scheduleTitle" value={item.title} onChange={(event) => setItem({ ...item, title: event.target.value })} /><RequestField label="일정 날짜" name="scheduleDate" type="date" value={item.scheduleDate} onChange={(event) => setItem({ ...item, scheduleDate: event.target.value })} /><div className="space-y-2"><Label>캠퍼스</Label><Select value={item.branch} onValueChange={(branch) => setItem({ ...item, branch })}><SelectTrigger className="h-11 sm:h-9"><SelectValue /></SelectTrigger><SelectContent>{item.branch === "본사 공통" && <SelectItem value="본사 공통">공동 (예전 본사 공통)</SelectItem>}{campuses.map((campus) => <SelectItem key={campus} value={campus}>{campus === "공동" ? "공동 작업" : campus}</SelectItem>)}</SelectContent></Select></div><RequestField label="제작물 종류" name="scheduleAssetType" value={item.assetType} onChange={(event) => setItem({ ...item, assetType: event.target.value })} /><RequestField label="담당자" name="scheduleManager" value={item.manager} onChange={(event) => setItem({ ...item, manager: event.target.value })} /><div className="space-y-2"><Label>상태</Label><Select value={item.status} onValueChange={(status) => setItem({ ...item, status: status as RequestStatus })}><SelectTrigger className="h-11 sm:h-9"><SelectValue /></SelectTrigger><SelectContent>{Object.entries(statusLabels).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div></div>{item.status === "delayed" && <div className="grid gap-4 sm:grid-cols-2"><RequestField label="변경 예정일" name="scheduleRevised" type="date" value={item.revisedDueDate} onChange={(event) => setItem({ ...item, revisedDueDate: event.target.value })} /><RequestField label="지연 사유" name="scheduleDelay" value={item.delayedReason} onChange={(event) => setItem({ ...item, delayedReason: event.target.value })} /></div>}<RequestText label="일정 메모" name="scheduleNotes" value={item.notes} onChange={(event) => setItem({ ...item, notes: event.target.value })} /><DialogFooter className="gap-2">{exists && <Button variant="ghost" className={`h-11 sm:mr-auto sm:h-10 ${confirmDelete ? "text-rose-600" : "text-muted-foreground"}`} disabled={saving} onClick={() => { if (confirmDelete) onDelete(); else setConfirmDelete(true); }}><Trash2 className="size-4" />{confirmDelete ? "한 번 더 누르면 삭제돼요" : "일정 삭제"}</Button>}<Button variant="outline" className="h-11 sm:h-10" onClick={() => setItem(null)}>취소</Button><Button className="h-11 sm:h-10" onClick={onSave} disabled={saving}>{saving ? <LoaderCircle className="animate-spin" /> : <CheckCircle2 />}일정 저장</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function RequestField({ label, name, ...props }: { label: string; name: string } & React.ComponentProps<typeof Input>) { return <div className="space-y-2"><Label htmlFor={name}>{label}</Label><Input id={name} name={name} className="h-11 rounded-xl sm:h-9" {...props} /></div>; }

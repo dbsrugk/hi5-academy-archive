@@ -34,7 +34,7 @@ function saveToken(token: string | null) {
   const secure = location.protocol === "https:" ? "; Secure" : "";
   document.cookie = token ? `${COOKIE}=${token}; Path=/; SameSite=Lax${secure}` : `${COOKIE}=; Path=/; Max-Age=0; SameSite=Lax${secure}`;
 }
-function signOut() { saveToken(null); currentMe = null; currentRole = null; }
+function signOut() { saveToken(null); currentMe = null; currentRole = null; fundToken = null; }
 
 let currentRole: Role | null = null;
 const fileCache = new Map<string, { url: string; at: number }>();
@@ -53,9 +53,20 @@ const normalizeTag = (v: string) => v.replace(/^#+/, "").trim().replace(/\s+/g, 
 
 class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
 
+// ---------- 제작실 기금 잠금 (비밀번호 재입력 → 10분 동안 안 쓰면 다시 잠김, 새로고침해도 잠김) ----------
+const FUND_IDLE = 10 * 60_000;
+let fundToken: string | null = null;
+let fundUsed = 0;
+function fundTokenNow() {
+  if (fundToken && Date.now() - fundUsed > FUND_IDLE) fundToken = null;
+  if (fundToken) fundUsed = Date.now();
+  return fundToken;
+}
+
 // ---------- 서버 호출 ----------
 async function call(path: string, body: Json = {}) {
   const token = storage.get(TOKEN_KEY, true);
+  const ft = path.startsWith("fund/") || body?.collection === "fund" ? fundTokenNow() : null;
   const response = await fetchNative(`${FN}/${path}`, {
     method: "POST",
     headers: {
@@ -63,11 +74,13 @@ async function call(path: string, body: Json = {}) {
       apikey: SUPABASE_KEY,
       authorization: `Bearer ${SUPABASE_KEY}`,
       ...(token ? { "x-archive-token": token } : {}),
+      ...(ft ? { "x-fund-token": ft } : {}),
     },
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
+    if (data.fundLocked) { fundToken = null; throw new ApiError(423, data.error ?? "기금이 잠겼어요."); }
     if (response.status === 401 || data.logout) signOut();
     throw new ApiError(response.status, data.error ?? "요청을 처리하지 못했습니다.");
   }
@@ -99,8 +112,32 @@ export const readsApi = {
 
 // ---------- 지문(패스키) 로그인 ----------
 const PASSKEY_FLAG = "hi5-passkey-device";
+/** 카톡·밴드·인스타 같은 '앱 안 브라우저'면 이름을 돌려준다 (여기서는 지문 로그인이 안 됨) */
+export function inAppBrowser(): string | null {
+  if (typeof navigator === "undefined") return null;
+  const ua = navigator.userAgent;
+  if (/KAKAOTALK/i.test(ua)) return "카카오톡";
+  if (/BAND\//i.test(ua)) return "밴드";
+  if (/Instagram/i.test(ua)) return "인스타그램";
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) return "페이스북";
+  if (/NAVER\(inapp|NAVER/.test(ua)) return "네이버 앱";
+  if (/DaumApps|DaumDevice/i.test(ua)) return "다음 앱";
+  if (/Line\//i.test(ua)) return "라인";
+  if (/Android/.test(ua) && /; wv\)/.test(ua)) return "앱";
+  return null;
+}
+/** 바깥 브라우저(사파리·크롬)로 지금 주소를 다시 연다. 바로 못 여는 경우 false */
+export function openExternalBrowser(): boolean {
+  const url = location.href.split("#")[0];
+  const ua = navigator.userAgent;
+  if (/KAKAOTALK/i.test(ua)) { location.href = `kakaotalk://web/openExternal?url=${encodeURIComponent(url)}`; return true; }
+  if (/Android/.test(ua)) { location.href = `intent://${url.replace(/^https?:\/\//, "")}#Intent;scheme=https;package=com.android.chrome;end`; return true; }
+  return false;
+}
 export const passkeyApi = {
-  supported: () => typeof window !== "undefined" && "PublicKeyCredential" in window && window.isSecureContext,
+  supported: () => typeof window !== "undefined" && "PublicKeyCredential" in window && window.isSecureContext && !inAppBrowser(),
+  /** 실패 원인을 서버 기록에 남긴다 (추적용) */
+  report: (stage: string, error: unknown) => { const e = error as Error; void call("passkey/client-error", { stage, name: e?.name ?? "", msg: String(e?.message ?? e).slice(0, 300), ua: navigator.userAgent.slice(0, 300) }).catch(() => undefined); },
   /** 이 기기에 등록돼 있는지 (기기별 표시용) */
   onThisDevice: () => storage.get(PASSKEY_FLAG) === "1",
   async login(): Promise<{ role: Role; me: Me }> {
@@ -262,8 +299,8 @@ async function marketingGet(params: URLSearchParams, role: Role) {
     .filter((a) => !q || [a.title, a.assetType, a.channel, a.notes].some((f) => like(f, q)))
     .sort((a, b) => byDesc("updatedAt")(a, b) || b.id.localeCompare(a.id))
     .slice(0, params.get("limit") === "all" ? 500 : 24);
-  await ensureBlobs(rows.flatMap((a) => [a.previewKey, a.sourceKey]));
-  return json({ assets: rows.map((a) => ({ ...a, previewUrl: fileUrl(a.previewKey), sourceUrl: fileUrl(a.sourceKey, true) })), nextCursor: null });
+  await ensureBlobs(rows.flatMap((a) => [a.previewKey, a.sourceKey, ...(Array.isArray(a.galleryImages) ? a.galleryImages.map((g: Json) => g.src) : [])]));
+  return json({ assets: rows.map((a) => ({ ...a, previewUrl: fileUrl(a.previewKey), sourceUrl: fileUrl(a.sourceKey, true), galleryImages: Array.isArray(a.galleryImages) ? a.galleryImages.map((g: Json) => ({ ...g, key: g.src, src: fileUrl(g.src) ?? g.src })) : a.galleryImages })), nextCursor: null });
 }
 async function marketingPost(body: Json) {
   const title = str(body.title, 160), createdDate = str(body.createdDate, 20), assetType = str(body.assetType, 80), target = str(body.target, 80);
@@ -349,8 +386,8 @@ async function promotionsPost(body: Json, role: Role) {
 const requestStatuses = ["approval_pending", "producing", "reviewing", "delayed", "completed"];
 async function requestsGet() {
   const rows = (await all("productionRequests")).sort((a, b) => byDesc("updatedAt")(a, b) || b.id.localeCompare(a.id)).slice(0, 100);
-  await ensureBlobs(rows.flatMap((r) => (r.references ?? []).map((i: Json) => i.key)));
-  return json({ requests: rows.map((r) => { const { references, ...rest } = r; return { ...rest, referenceImages: (references ?? []).map((i: Json) => ({ src: fileUrl(i.key), name: i.name })) }; }) });
+  await ensureBlobs(rows.flatMap((r) => [...(r.references ?? []).map((i: Json) => i.key), ...(r.progressImages ?? []).map((i: Json) => i.key)]));
+  return json({ requests: rows.map((r) => { const { references, ...rest } = r; return { ...rest, referenceImages: (references ?? []).map((i: Json) => ({ src: fileUrl(i.key), name: i.name })), progressImages: (r.progressImages ?? []).map((i: Json) => ({ ...i, src: fileUrl(i.key) })) }; }) });
 }
 async function requestsPost(body: Json) {
   const title = str(body.title, 160), branch = str(body.branch, 80), requester = str(body.requester, 80), assetType = str(body.assetType, 80);
@@ -368,16 +405,18 @@ async function requestsPost(body: Json) {
 }
 function whoAmI() { const me = getMe(); return me ? `${me.campus === "전체" ? "이사" : me.campus} ${me.name}` : ""; }
 async function requestsPatch(id: string, body: Json) {
-  if (!requestStatuses.includes(body?.status)) return bad("변경 내용을 확인해 주세요.");
+  if (body?.status !== undefined && !requestStatuses.includes(body.status)) return bad("변경 내용을 확인해 주세요.");
   const at = now();
-  const patch: Json = { status: body.status, updatedAt: at };
   const existing = await getDoc("productionRequests", id);
   if (!existing) return json({ error: "요청을 찾을 수 없습니다." }, 404);
-  if (existing.status !== body.status) {
+  const patch: Json = { status: body.status ?? existing.status, updatedAt: at };
+  if (body.progressImages !== undefined) patch.progressImages = (Array.isArray(body.progressImages) ? body.progressImages : []).filter((i: Json) => i && i.key).slice(-40).map((i: Json) => ({ key: str(i.key, 160), name: str(i.name, 200), caption: str(i.caption, 120), at: str(i.at, 40) || at, by: str(i.by, 80) || whoAmI() }));
+  if (body.desiredDate !== undefined) patch.desiredDate = str(body.desiredDate, 20);
+  if (existing.status !== patch.status) {
     const history = Array.isArray(existing.history) ? existing.history.slice(-30) : [];
-    patch.history = [...history, { status: body.status, at, by: whoAmI(), note: body.status === "delayed" ? str(body.delayedReason, 200) : "" }];
-    if (body.status === "producing" && !existing.approvedAt) { patch.approvedAt = at; patch.approvedBy = whoAmI(); }
-    if (body.status === "completed") patch.completedAt = at;
+    patch.history = [...history, { status: patch.status, at, by: whoAmI(), note: patch.status === "delayed" ? str(body.delayedReason, 200) : "" }];
+    if (patch.status === "producing" && !existing.approvedAt) { patch.approvedAt = at; patch.approvedBy = whoAmI(); }
+    if (patch.status === "completed") patch.completedAt = at;
   }
   if (body.assignee !== undefined) patch.assignee = str(body.assignee, 80);
   if (body.progressPercent !== undefined) patch.progressPercent = Math.min(100, int(body.progressPercent));
@@ -386,6 +425,16 @@ async function requestsPatch(id: string, body: Json) {
   if (body.revisedDueDate !== undefined) patch.revisedDueDate = str(body.revisedDueDate, 20);
   if (body.notes !== undefined) patch.notes = str(body.notes);
   if (body.resultAssetId !== undefined) patch.resultAssetId = body.resultAssetId ? str(body.resultAssetId, 80) : null;
+  await updateDoc("productionRequests", id, patch);
+  return json({ id, ...patch });
+}
+/** 요청자 본인 수정 ('승인 대기'일 때만 — 서버가 다시 확인) */
+async function requestsEdit(id: string, body: Json) {
+  const existing = await getDoc("productionRequests", id);
+  if (!existing) return json({ error: "요청을 찾을 수 없습니다." }, 404);
+  const title = str(body.title, 160), desiredDate = str(body.desiredDate, 20), assetType = str(body.assetType, 80);
+  if (!title || desiredDate.length < 8 || !assetType) return bad();
+  const patch = { title, desiredDate, assetType, branch: str(body.branch, 80) || existing.branch, specifications: str(body.specifications, 2000), purpose: str(body.purpose, 2000), requiredCopy: str(body.requiredCopy), notes: str(body.notes), updatedAt: now() };
   await updateDoc("productionRequests", id, patch);
   return json({ id, ...patch });
 }
@@ -463,6 +512,13 @@ const cleanFund = (r: Partial<FundRow>) => ({
   income: Math.max(0, Math.round(Number(r.income) || 0)), expense: Math.max(0, Math.round(Number(r.expense) || 0)), memo: String(r.memo ?? "").slice(0, 300), receiptKey: r.receiptKey ?? null,
 });
 export const fundApi = {
+  isUnlocked: () => Boolean(fundToken && Date.now() - fundUsed <= FUND_IDLE),
+  lock: () => { fundToken = null; },
+  async unlock(pin: string) {
+    const data = await call("fund/unlock", { pin });
+    if (!data.ok) throw new Error(data.msg ?? "비밀번호를 확인해 주세요.");
+    fundToken = String(data.token); fundUsed = Date.now();
+  },
   /** 업로드한 줄들의 고유번호 — 같은 파일을 두 번 올려도 중복 등록되지 않게 */
   async importIds(rows: Partial<FundRow>[]) {
     const seen = new Map<string, number>();
@@ -582,8 +638,8 @@ async function route(method: string, path: string, params: URLSearchParams, init
     }
 
     if (head === "fund") {
-      if (id === "session") return json({ authenticated: Boolean((await call("fund/session")).authenticated) });
-      if (id === "login" || id === "logout") return json({ authenticated: currentMe?.title === "원장" || currentMe?.title === "이사" });
+      if (id === "session") { const d = await call("fund/session"); return json({ authenticated: Boolean(d.authenticated), unlocked: Boolean(d.unlocked) }); }
+      if (id === "login" || id === "logout") return json({ authenticated: ["원장", "이사", "제작실장"].includes(currentMe?.title ?? "") });
       return await fundGet();
     }
 
@@ -621,17 +677,25 @@ async function route(method: string, path: string, params: URLSearchParams, init
       if (id && method === "DELETE") { await deleteDoc("promotions", id); return json({ ok: true }); }
     }
 
+    // 제작실장은 제작 요청·일정에서 관리자와 같다
+    const prodRole: Role = role === "admin" || currentMe?.title === "제작실장" ? "admin" : role;
+    if (head === "production-complete" && method === "POST") {
+      const data = await call("production/complete", await readBody());
+      return json(data, data.ok ? 200 : 400);
+    }
     if (head === "production-requests") {
       if (!id && method === "GET") return await requestsGet();
       if (!id && method === "POST") return await requestsPost(await readBody());
-      if (role !== "admin") return forbidden();
-      if (id && method === "PATCH") return await requestsPatch(id, await readBody());
+      // 요청자 본인은 '승인 대기'일 때 고치기·지우기 가능 (서버가 확인)
+      if (id && method === "PUT") return await requestsEdit(id, await readBody());
       if (id && method === "DELETE") { await deleteDoc("productionRequests", id); return json({ id }); }
+      if (prodRole !== "admin") return forbidden();
+      if (id && method === "PATCH") return await requestsPatch(id, await readBody());
     }
 
     if (head === "production-schedules") {
       if (!id && method === "GET") return json({ schedules: (await all("productionSchedules")).sort((a, b) => byDesc("scheduleDate")(a, b) || byDesc("updatedAt")(a, b)) });
-      if (role !== "admin") return forbidden();
+      if (prodRole !== "admin") return forbidden();
       if (method === "DELETE" && id) { await deleteDoc("productionSchedules", id); return json({ id }); }
       const data = scheduleBody(await readBody());
       if (!data) return bad("일정 내용을 확인해 주세요.");
@@ -642,7 +706,7 @@ async function route(method: string, path: string, params: URLSearchParams, init
 
     if (head === "production-priority") {
       if (method === "GET") return json({ overrides: (await all("productionPriority")).map((o) => ({ monthKey: o.id, branch: o.branch, updatedAt: o.updatedAt })).sort((a, b) => a.monthKey.localeCompare(b.monthKey)) });
-      if (role !== "admin") return forbidden();
+      if (prodRole !== "admin") return forbidden();
       const b = await readBody();
       if (!/^\d{4}-\d{2}$/.test(String(b.monthKey)) || !["김해캠퍼스", "센텀캠퍼스", "명지캠퍼스"].includes(b.branch)) return bad("월과 캠퍼스를 확인해 주세요.");
       await setDoc("productionPriority", b.monthKey, { branch: b.branch, updatedAt: now() });

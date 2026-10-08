@@ -2,10 +2,10 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import Image from "next/image";
-import { Fingerprint, LoaderCircle, LogIn, UserPlus } from "lucide-react";
+import { ExternalLink, Fingerprint, LoaderCircle, LogIn, UserPlus } from "lucide-react";
 import { toast, Toaster } from "sonner";
 
-import { passkeyApi } from "@/archive-api";
+import { inAppBrowser, openExternalBrowser, passkeyApi } from "@/archive-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { CampusDot } from "@/lib/campus";
 
 export const CAMPUSES = ["센텀", "김해", "명지"] as const;
-export const TITLES = ["원장", "전임", "행정", "이사"] as const;
+export const TITLES = ["원장", "전임", "행정", "이사", "제작실장"] as const;
 const ALL_CAMPUS = "전체"; // 이사는 캠퍼스 소속 없음
 type Role = "staff" | "admin";
 
@@ -34,9 +34,11 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
   const director = applyTitle === "이사";
   const [canPasskey, setCanPasskey] = useState(false);
   const [offer, setOffer] = useState<{ role: Role; name: string } | null>(null);
+  const [inApp, setInApp] = useState<string | null>(null);
   const isMobile = typeof navigator !== "undefined" && /iPhone|iPad|Android|Mobile/i.test(navigator.userAgent);
   useEffect(() => {
     setCanPasskey(passkeyApi.supported());
+    setInApp(inAppBrowser());
     try { const reason = sessionStorage.getItem("hi5-logout-reason"); if (reason) { sessionStorage.removeItem("hi5-logout-reason"); setMessage({ text: reason }); } } catch { /* 무시 */ }
   }, []);
   const SKIP = "hi5-passkey-skip";
@@ -53,7 +55,8 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
     try { const { role, me } = await passkeyApi.login(); done(role, me.name, false); }
     catch (error) {
       const e = error as Error;
-      setMessage({ text: e.name === "NotAllowedError" ? "지문 확인을 취소했어요. 다시 누르거나 비밀번호로 로그인해 주세요." : e.message || "지문으로 로그인하지 못했어요." });
+      passkeyApi.report("login", e);
+      setMessage({ text: e.name === "NotAllowedError" ? "지문 확인이 취소됐거나 시간이 지났어요. 다시 누르거나 비밀번호로 로그인해 주세요." : e.name === "SecurityError" ? "이 화면에서는 지문을 쓸 수 없어요. 사파리나 크롬에서 열어 주세요." : e.message || "지문으로 로그인하지 못했어요." });
       if (/등록되지 않은/.test(e.message)) passkeyApi.forgetDevice();
     } finally { setBusy(false); }
   }
@@ -61,7 +64,7 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
     if (!offer) return;
     setBusy(true);
     try { await passkeyApi.register(); toast.success("등록 완료! 다음부터 지문으로 바로 들어와요 👆"); onLogin(offer.role); }
-    catch (error) { const e = error as Error; toast.error(e.name === "NotAllowedError" ? "등록을 취소했어요. '내 정보'에서 언제든 켤 수 있어요." : e.message || "등록하지 못했어요."); onLogin(offer.role); }
+    catch (error) { const e = error as Error; passkeyApi.report("register", e); toast.error(e.name === "NotAllowedError" ? "등록을 취소했어요. '내 정보'에서 언제든 켤 수 있어요." : e.message || "등록하지 못했어요."); onLogin(offer.role); }
     finally { setBusy(false); }
   }
 
@@ -127,6 +130,11 @@ export function LoginGate({ onLogin }: { onLogin: (role: Role) => void }) {
               </div>
             ) : tab === "login" ? (
               <>
+              {inApp && <div className="mt-6 space-y-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                <p className="flex items-center gap-1.5 font-semibold"><Fingerprint className="size-4" />{inApp} 안에서는 지문 로그인이 안 돼요</p>
+                <p>사파리나 크롬에서 열면 지문으로 로그인할 수 있어요. 비밀번호 로그인은 여기서도 돼요.</p>
+                <Button type="button" variant="outline" className="h-11 w-full rounded-xl bg-background" onClick={() => { if (!openExternalBrowser()) { void navigator.clipboard?.writeText(location.href.split("#")[0]).catch(() => undefined); setMessage({ text: "주소를 복사했어요. 화면 오른쪽 아래(또는 위) ··· 메뉴에서 'Safari로 열기'를 누르거나, 사파리에 붙여넣어 주세요.", ok: true }); } }}><ExternalLink className="size-4" />사파리·크롬으로 열기</Button>
+              </div>}
               {canPasskey && <div className="mt-6 space-y-3">
                 <Button type="button" variant={passkeyApi.onThisDevice() ? "default" : "outline"} className="h-12 w-full rounded-xl text-base" disabled={busy} onClick={fingerprintLogin}>{busy ? <LoaderCircle className="size-4 animate-spin" /> : <Fingerprint className="size-5" />}지문으로 로그인</Button>
                 <div className="flex items-center gap-3 text-xs text-muted-foreground"><span className="h-px flex-1 bg-border" />또는 비밀번호로<span className="h-px flex-1 bg-border" /></div>

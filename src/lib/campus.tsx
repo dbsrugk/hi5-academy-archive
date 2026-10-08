@@ -10,6 +10,7 @@ const fixed: Array<[string, string]> = [
   ["김포", "#5B7A2E"],
   ["본사", "#7A736B"],
   ["공통", "#7A736B"],
+  ["공동", "#7A736B"],
 ];
 const extra = ["#8A5CD1", "#C2457A", "#2B9AA8", "#A0782A", "#5B7A2E", "#B5562F"];
 

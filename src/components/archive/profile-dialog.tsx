@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Fingerprint, LoaderCircle, Mail, Send, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { passkeyApi, profileApi, type Profile } from "@/archive-api";
+import { inAppBrowser, passkeyApi, profileApi, type Profile } from "@/archive-api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,7 @@ export function ProfileDialog({ open, onOpenChange, me, isAdmin }: { open: boole
   async function addKey() {
     setBusy("pk");
     try { await passkeyApi.register(); toast.success("이 기기에 지문 로그인을 켰어요 👆"); await loadKeys(); }
-    catch (error) { const e = error as Error; toast.error(e.name === "NotAllowedError" ? "등록을 취소했어요." : e.message || "등록하지 못했어요."); }
+    catch (error) { const e = error as Error; passkeyApi.report("register", e); toast.error(e.name === "NotAllowedError" ? "등록을 취소했어요." : e.message || "등록하지 못했어요."); }
     finally { setBusy(""); }
   }
   async function removeKey(id: string) {
@@ -89,7 +89,7 @@ export function ProfileDialog({ open, onOpenChange, me, isAdmin }: { open: boole
           <p className="flex items-center gap-1.5 text-sm font-semibold"><Fingerprint className="size-4" />지문 로그인</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">보안을 위해 사이트를 열 때마다 로그인해요. 지문(얼굴 인식·윈도우 Hello)을 등록해 두면 1초 만에 들어와요. PC는 선택이에요.</p>
           {keys === null ? <p className="mt-3 text-xs text-muted-foreground">불러오는 중…</p> : keys.length > 0 && <ul className="mt-3 space-y-1.5">{keys.map((k) => <li key={k.id} className="flex items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm"><Fingerprint className="size-4 text-primary" /><span className="min-w-0 flex-1 truncate">{k.device ?? "등록한 기기"}<span className="ml-1.5 text-xs text-muted-foreground">{k.last_used_at ? `최근 ${k.last_used_at.slice(5, 10).replace("-", "/")}` : `등록 ${k.created_at.slice(5, 10).replace("-", "/")}`}</span></span><Button type="button" size="icon-sm" variant="ghost" aria-label="이 지문 로그인 지우기" disabled={!!busy} onClick={() => void removeKey(k.id)}><X className="size-4" /></Button></li>)}</ul>}
-          {passkeyApi.supported() && passkeyApi.onThisDevice() && (keys?.length ?? 0) > 0 ? <p className="mt-3 text-xs font-medium text-emerald-700 dark:text-emerald-300">✓ 이 기기는 지문 로그인이 켜져 있어요.</p> : passkeyApi.supported() ? <Button type="button" variant="outline" className="mt-3 h-10 w-full rounded-xl" disabled={!!busy} onClick={() => void addKey()}>{busy === "pk" ? <LoaderCircle className="size-4 animate-spin" /> : <Fingerprint className="size-4" />}이 기기에 지문 등록</Button> : <p className="mt-3 text-xs text-muted-foreground">이 브라우저는 지문 로그인을 지원하지 않아요.</p>}
+          {passkeyApi.supported() && passkeyApi.onThisDevice() && (keys?.length ?? 0) > 0 ? <p className="mt-3 text-xs font-medium text-emerald-700 dark:text-emerald-300">✓ 이 기기는 지문 로그인이 켜져 있어요.</p> : passkeyApi.supported() ? <Button type="button" variant="outline" className="mt-3 h-10 w-full rounded-xl" disabled={!!busy} onClick={() => void addKey()}>{busy === "pk" ? <LoaderCircle className="size-4 animate-spin" /> : <Fingerprint className="size-4" />}이 기기에 지문 등록</Button> : <p className="mt-3 text-xs text-muted-foreground">{inAppBrowser() ? `${inAppBrowser()} 안에서는 지문을 등록할 수 없어요. 사파리나 크롬에서 열어 주세요.` : "이 브라우저는 지문 로그인을 지원하지 않아요."}</p>}
         </div>
 
         {!profile.mailReady && <p className="rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">메일 발송 연결을 준비하고 있어요. 주소를 미리 저장해 두면 연결되는 즉시 받아요.</p>}

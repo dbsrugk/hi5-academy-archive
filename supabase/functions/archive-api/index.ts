@@ -11,14 +11,17 @@ type Member = { id: string; campus: string; title: string; name: string; status:
 const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const BUCKET = "archive-files";
 const CAMPUSES = ["센텀", "김해", "명지"];
-const TITLES = ["원장", "전임", "행정", "이사"];
+const TITLES = ["원장", "전임", "행정", "이사", "제작실장"];
 const ALL_CAMPUS = "전체"; // 이사는 특정 캠퍼스 소속이 아님
 const isPrincipal = (t: string) => t === "원장" || t === "이사";
+const isProducer = (t: string) => t === "제작실장"; // 제작 쪽 관리자와 같은 권한 + 제작실 기금
+const PROD_COLLECTIONS = new Set(["productionRequests", "productionSchedules", "productionPriority"]);
+const canFund = (m: { title: string }) => isPrincipal(m.title) || isProducer(m.title);
 const SESSION_HOURS = 12; // 열 때마다 로그인 (화면에서 창을 닫으면 지워짐) + 최대 12시간
 const cors = {
   "access-control-allow-origin": "*",
   "access-control-allow-methods": "GET,POST,OPTIONS",
-  "access-control-allow-headers": "authorization, apikey, content-type, x-client-info, x-archive-token, x-cron-secret",
+  "access-control-allow-headers": "authorization, apikey, content-type, x-client-info, x-archive-token, x-cron-secret, x-fund-token",
 };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { ...cors, "content-type": "application/json" } });
 const now = () => new Date().toISOString();
@@ -100,6 +103,11 @@ function background(p: Promise<unknown>) {
 async function adminIds(except?: string) {
   const { data } = await supabase.from("members").select("id").eq("is_admin", true).eq("status", "approved");
   return (data ?? []).map((r) => r.id).filter((id) => id !== except);
+}
+// 제작 요청 담당 (관리자 + 제작실장)
+async function prodManagerIds(except?: string) {
+  const { data } = await supabase.from("members").select("id,title,is_admin").eq("status", "approved");
+  return (data ?? []).filter((m) => m.is_admin || isProducer(m.title)).map((m) => m.id).filter((id) => id !== except);
 }
 async function sendPush(memberIds: string[], n: Note) {
   if (!memberIds.length || !(await setupVapid())) return;
@@ -225,7 +233,7 @@ async function contentNotify(collection: string, id: string, prev: Json | undefi
     return;
   }
   if (collection === "fund") {
-    const ids = await memberIds((m) => isPrincipal(m.title), me.id);
+    const ids = await memberIds((m) => canFund(m), me.id);
     const amount = Number(next.income || 0) ? `입금 ${Number(next.income).toLocaleString("ko-KR")}원` : Number(next.expense || 0) ? `지출 ${Number(next.expense).toLocaleString("ko-KR")}원` : "";
     await notifyGrouped(ids, { kind: "fund", title: prev ? "💰 제작실 기금 내역이 수정됐어요" : "💰 제작실 기금 내역이 추가됐어요", body: [who, next.description, amount].filter(Boolean).join(" · "), link: "#fund", ref: `fund-${me.id}-${slot(60)}` });
   }
@@ -237,13 +245,13 @@ const REQUEST_NOTES: Record<string, (r: Json) => Note> = {
   producing: (r) => ({ kind: "request", title: "✅ 제작 요청이 승인됐어요", body: `'${r.title}' 제작을 시작했어요${r.assignee ? ` · 담당 ${r.assignee}` : ""}`, link: "#requests" }),
   reviewing: (r) => ({ kind: "request", title: "👀 시안이 나왔어요", body: `'${r.title}' 시안을 확인해 주세요`, link: "#requests" }),
   delayed: (r) => ({ kind: "request", title: "⏰ 제작이 지연되고 있어요", body: `'${r.title}' · ${r.delayedReason || "사유 미입력"}${r.revisedDueDate ? ` · 변경 완료일 ${r.revisedDueDate}` : ""}`, link: "#requests" }),
-  completed: (r) => ({ kind: "request", title: "🎉 제작이 완료됐어요", body: `'${r.title}'${r.driveUrl ? " · Drive에서 확인하세요" : ""}`, link: "#requests" }),
+  completed: (r) => ({ kind: "request", title: "🎉 제작이 완료됐어요", body: `'${r.title}' · 마케팅 제작물에 올라갔어요`, link: r.resultAssetId ? `#marketing?open=${r.resultAssetId}` : "#requests" }),
 };
 // 매일 오전 9시: 마감 임박인데 승인 대기 / 마감 지난 진행 중 요청
 async function dailyCheck() {
   const { data } = await supabase.from("docs").select("id,data").eq("collection", "productionRequests");
   const today = kstToday(), soon = addDays(today, 2);
-  const admins = await adminIds();
+  const admins = await prodManagerIds();
   let count = 0;
   const digest = new Map<string, { title: string; body?: string }[]>();
   const add = (ids: string[], n: Note) => ids.forEach((id) => digest.set(id, [...(digest.get(id) ?? []), { title: n.title, body: n.body }]));
@@ -272,10 +280,10 @@ async function notifyList(me: Member) {
   const { data: items } = await supabase.from("notifications").select("id,kind,title,body,link,created_at,read_at,count").eq("member_id", me.id).order("created_at", { ascending: false }).limit(80);
   const { count: unread } = await supabase.from("notifications").select("id", { count: "exact", head: true }).eq("member_id", me.id).is("read_at", null);
   const badges: Json = {};
-  if (me.is_admin) {
+  if (me.is_admin || isProducer(me.title)) {
     const { count: requests } = await supabase.from("docs").select("id", { count: "exact", head: true }).eq("collection", "productionRequests").eq("data->>status", "approval_pending");
     const { count: members } = await supabase.from("members").select("id", { count: "exact", head: true }).eq("status", "pending");
-    badges.requests = requests ?? 0; badges.members = members ?? 0;
+    badges.requests = requests ?? 0; if (me.is_admin) badges.members = members ?? 0;
   }
   const { count: devices } = await supabase.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("member_id", me.id);
   return json({ items: items ?? [], unread: unread ?? 0, badges, devices: devices ?? 0, vapidKey: (await config()).vapid_public ?? null });
@@ -356,7 +364,7 @@ async function passkeyRegisterVerify(req: Request, body: Json, me: Member, ip: s
     if (error) throw error;
     await log(me, "passkey", "지문 로그인 등록", ip);
     return json({ ok: true });
-  } catch (e) { console.error("[passkey]", e); return json({ ok: false, msg: "등록하지 못했어요. 다시 시도해 주세요." }); }
+  } catch (e) { console.error("[passkey]", e, req.headers.get("user-agent")); return json({ ok: false, msg: /android:apk-key-hash|origin/i.test(String((e as Error)?.message)) ? "앱 안 브라우저(카톡 등)에서는 등록할 수 없어요. 사파리나 크롬에서 열어 주세요." : "등록하지 못했어요. 다시 시도해 주세요." }); }
 }
 async function passkeyLoginOptions(req: Request) {
   const rp = rpOf(req); if (!rp) return json({ ok: false, msg: "이 주소에서는 지문 로그인을 쓸 수 없어요." }, 400);
@@ -373,7 +381,7 @@ async function passkeyLoginVerify(req: Request, body: Json, ip: string) {
     const v = await verifyAuthenticationResponse({ response: body.response, expectedChallenge: st.c, expectedOrigin: rp.origin, expectedRPID: rp.rpID, requireUserVerification: true, credential: { id: credId, publicKey: unb64u(pk.public_key), counter: Number(pk.counter), transports: pk.transports as any } });
     if (!v.verified) return json({ ok: false, msg: "지문을 확인하지 못했어요." });
     await supabase.from("passkeys").update({ counter: v.authenticationInfo.newCounter, last_used_at: now() }).eq("id", pk.id);
-  } catch (e) { console.error("[passkey]", e); return json({ ok: false, msg: "지문을 확인하지 못했어요." }); }
+  } catch (e) { console.error("[passkey]", e, req.headers.get("user-agent")); return json({ ok: false, msg: /android:apk-key-hash|origin/i.test(String((e as Error)?.message)) ? "앱 안 브라우저(카톡 등)에서는 지문을 쓸 수 없어요. 사파리나 크롬에서 열어 주세요." : "지문을 확인하지 못했어요." }); }
   const { data: m } = await supabase.from("members").select("*").eq("id", pk.member_id).maybeSingle();
   if (!m || m.status !== "approved") return json({ ok: false, msg: "사용할 수 없는 계정이에요. 관리자에게 문의해 주세요." });
   await supabase.from("members").update({ failed_count: 0, locked_until: null, last_seen: now() }).eq("id", m.id);
@@ -471,8 +479,8 @@ async function signRead(keys: unknown) {
 
 // ---------- 문서 ----------
 // 제작실 기금은 직책이 '원장'인 회원만
-function canRead(collection: string, role: Role, principal: boolean) {
-  if (collection === "fund") return principal;
+function canRead(collection: string, role: Role, principal: boolean, fund = false) {
+  if (collection === "fund") return fund;
   if (collection === "nationalNews") return principal || role === "admin"; // 전국 Hi5 소식: 원장·이사·관리자
   if (ADMIN_READ.has(collection)) return role === "admin";
   return true;
@@ -481,26 +489,30 @@ function hideDraft(collection: string, role: Role, doc: Json) {
   const field = DRAFT_FIELD[collection];
   return role !== "admin" && field && doc[field] !== "published";
 }
-async function dbList(collection: string, role: Role, principal: boolean) {
-  if (!canRead(collection, role, principal)) return json({ docs: [] });
+async function dbList(collection: string, role: Role, principal: boolean, fund = false) {
+  if (!canRead(collection, role, principal, fund)) return json({ docs: [] });
   const { data, error } = await supabase.from("docs").select("id,data").eq("collection", collection).order("updated_at", { ascending: false }).limit(5000);
   if (error) throw error;
   return json({ docs: (data ?? []).map((r) => ({ ...(r.data as Json), id: r.id })).filter((d) => !hideDraft(collection, role, d)) });
 }
-async function dbGet(collection: string, id: string, role: Role, principal: boolean) {
-  if (!canRead(collection, role, principal)) return json({ doc: null });
+async function dbGet(collection: string, id: string, role: Role, principal: boolean, fund = false) {
+  if (!canRead(collection, role, principal, fund)) return json({ doc: null });
   const { data, error } = await supabase.from("docs").select("id,data").eq("collection", collection).eq("id", id).maybeSingle();
   if (error) throw error;
   const doc = data ? { ...(data.data as Json), id: data.id } : null;
   return json({ doc: doc && !hideDraft(collection, role, doc) ? doc : null });
 }
-async function dbWrite(op: string, body: Json, role: Role, principal: boolean, me: Member) {
+async function dbWrite(op: string, body: Json, baseRole: Role, fundOpen: boolean, me: Member) {
   const collection = String(body.collection ?? ""), id = String(body.id ?? "");
   if (!COLLECTIONS.has(collection) || !/^[A-Za-z0-9_.:-]{1,120}$/.test(id)) return json({ error: "잘못된 요청입니다." }, 400);
-  if (collection === "fund" && !principal) return json({ error: "제작실 기금은 원장·이사만 관리할 수 있습니다." }, 403);
+  if (collection === "fund" && !fundOpen) return json({ error: canFund(me) ? "기금 잠금이 풀리지 않았어요. 비밀번호를 다시 입력해 주세요." : "제작실 기금은 원장·이사·제작실장만 관리할 수 있습니다.", fundLocked: canFund(me) }, 403);
+  // 제작실장은 제작 요청·일정에 한해 관리자와 같다
+  const role: Role = baseRole === "admin" || (PROD_COLLECTIONS.has(collection) && isProducer(me.title)) ? "admin" : "staff";
   const { data: existing, error: readError } = await supabase.from("docs").select("data").eq("collection", collection).eq("id", id).maybeSingle();
   if (readError) throw readError;
-  if (role !== "admin" && !(collection === "fund" && principal)) {
+  // 요청자 본인은 '승인 대기'일 때만 자기 요청을 고치거나 지울 수 있다
+  const ownPending = collection === "productionRequests" && existing && (existing.data as Json).createdById === me.id && (existing.data as Json).status === "approval_pending";
+  if (role !== "admin" && collection !== "fund" && !(ownPending && (op === "update" || op === "delete"))) {
     if (op !== "set" || !STAFF_CREATE.has(collection) || existing) return json({ error: "본사 관리자 권한이 필요합니다." }, 403);
   }
   if (op === "delete") {
@@ -520,6 +532,7 @@ async function dbWrite(op: string, body: Json, role: Role, principal: boolean, m
     Object.assign(next, { status: "approval_pending", progressPercent: 0, assignee: "", delayedReason: "", revisedDueDate: "", resultAssetId: null });
     delete next.approvedAt; delete next.approvedBy; delete next.completedAt;
     next.history = Array.isArray(next.history) ? next.history.slice(0, 1).map((h: Json) => ({ ...h, status: "approval_pending" })) : [];
+    next.progressImages = existing ? ((existing.data as Json).progressImages ?? []) : [];
   }
   if (collection === "productionRequests" && !existing) next.createdById = me.id;
   if (collection === "productionRequests" && existing) next.createdById = (existing.data as Json).createdById ?? null;
@@ -530,12 +543,96 @@ async function dbWrite(op: string, body: Json, role: Role, principal: boolean, m
   if (collection === "productionRequests") {
     const prev = existing?.data as Json | undefined;
     if (!prev) {
-      background(adminIds(me.id).then((ids) => notify(ids, { kind: "request", title: "📮 새 제작 요청이 들어왔어요", body: `${shortCampus(next.branch)} · ${next.requester || me.name} · '${next.title}'${next.desiredDate ? ` · 마감 ${next.desiredDate}` : ""}`, link: "#requests", ref: `new-${id}` })));
+      background(prodManagerIds(me.id).then((ids) => notify(ids, { kind: "request", title: "📮 새 제작 요청이 들어왔어요", body: `${shortCampus(next.branch)} · ${next.requester || me.name} · '${next.title}'${next.desiredDate ? ` · 마감 ${next.desiredDate}` : ""}`, link: "#requests", ref: `new-${id}` })));
     } else if (prev.status !== next.status && REQUEST_NOTES[next.status] && next.createdById && next.createdById !== me.id) {
       background(notify([next.createdById], { ...REQUEST_NOTES[next.status](next), ref: `st-${id}-${next.status}-${Date.now()}` }));
     }
+    const before = Array.isArray(prev?.progressImages) ? prev!.progressImages.length : 0, after = Array.isArray(next.progressImages) ? next.progressImages.length : 0;
+    if (prev && after > before && next.createdById && next.createdById !== me.id) {
+      const last = next.progressImages[after - 1] ?? {};
+      background(notify([next.createdById], { kind: "request", title: "🖼️ 진행 이미지가 올라왔어요", body: `'${next.title}'${last.caption ? ` · ${String(last.caption).slice(0, 60)}` : ""}`, link: `#requests?open=${id}`, ref: `pimg-${id}-${after}` }));
+    }
   }
   return json({ ok: true });
+}
+
+// ---------- 제작실 기금 잠금 ----------
+const FUND_MINUTES = 30;
+async function fundTokenOk(token: string | null, memberId: string) {
+  const [body, sig] = String(token ?? "").split(".");
+  if (!body || !sig || (await hmac("fund:" + body)) !== sig) return false;
+  try { const p = JSON.parse(unb64url(body)); return p.u === memberId && p.exp > Date.now(); } catch { return false; }
+}
+async function fundUnlock(body: Json, me: Member, ip: string) {
+  if (!canFund(me)) return json({ ok: false, msg: "제작실 기금은 원장·이사·제작실장만 열 수 있어요." }, 403);
+  const { data: m } = await supabase.from("members").select("pin_hash,pin_salt,failed_count,locked_until").eq("id", me.id).maybeSingle();
+  if (!m) return json({ ok: false, msg: "계정을 찾을 수 없어요." });
+  if (m.locked_until && new Date(m.locked_until).getTime() > Date.now()) return json({ ok: false, msg: "비밀번호를 여러 번 틀려 10분간 잠겼어요." });
+  if ((await pinHash(String(body.pin ?? ""), m.pin_salt)) !== m.pin_hash) {
+    const failed = (m.failed_count ?? 0) + 1;
+    await supabase.from("members").update({ failed_count: failed >= 5 ? 0 : failed, locked_until: failed >= 5 ? new Date(Date.now() + 10 * 60000).toISOString() : null }).eq("id", me.id);
+    await log(me, "fund_fail", "기금 비밀번호 오류", ip);
+    return json({ ok: false, msg: failed >= 5 ? "비밀번호를 여러 번 틀려 10분간 잠겼어요." : `비밀번호가 맞지 않아요. (${failed}/5)` });
+  }
+  await supabase.from("members").update({ failed_count: 0 }).eq("id", me.id);
+  await log(me, "fund_open", "제작실 기금 열람", ip);
+  const tb = b64url(JSON.stringify({ u: me.id, exp: Date.now() + FUND_MINUTES * 60_000 }));
+  return json({ ok: true, token: `${tb}.${await hmac("fund:" + tb)}`, minutes: FUND_MINUTES });
+}
+
+// ---------- 제작 완료 → 마케팅 제작물 + 구글 드라이브 ----------
+async function productionComplete(body: Json, me: Member) {
+  if (!(me.is_admin || isProducer(me.title))) return json({ ok: false, msg: "관리자·제작실장만 완료 처리할 수 있어요." }, 403);
+  const id = String(body.id ?? "");
+  const { data: row } = await supabase.from("docs").select("data").eq("collection", "productionRequests").eq("id", id).maybeSingle();
+  if (!row) return json({ ok: false, msg: "요청을 찾을 수 없어요." }, 404);
+  const r = row.data as Json;
+  const images = (Array.isArray(body.images) ? body.images : []).filter((i: Json) => typeof i?.key === "string" && /^[a-f0-9-]+\.[a-z0-9]{1,8}$/.test(i.key)).slice(0, 30)
+    .map((i: Json) => ({ key: String(i.key), name: String(i.name ?? "").slice(0, 200), caption: String(i.caption ?? "").slice(0, 120) }));
+  const at = now(), who = `${me.campus === ALL_CAMPUS ? "이사" : me.campus} ${me.name}`;
+  const title = String(body.title ?? r.title ?? "").trim().slice(0, 160) || String(r.title);
+  const branch = String(body.branch ?? r.branch ?? "공동").slice(0, 40);
+  const assetType = String(body.assetType ?? r.assetType ?? "기타").slice(0, 80);
+  let assetId: string | null = r.resultAssetId ?? null;
+  if (body.toMarketing !== false && images.length) {
+    assetId = assetId ?? crypto.randomUUID();
+    const marketing: Json = {
+      title, branch, assetType, createdDate: kstToday(), campaignYear: Number(kstToday().slice(0, 4)), target: String(body.target ?? "학생·학부모").slice(0, 80), channel: String(body.channel ?? "").slice(0, 100),
+      fileFormat: "", specifications: String(r.specifications ?? "").slice(0, 500), quantity: images.length, driveUrl: "", notes: String(body.notes ?? r.purpose ?? "").slice(0, 4000),
+      relatedEventId: null, previewKey: images[0].key, previewName: images[0].name || title, sourceKey: null, sourceName: null,
+      galleryImages: images.map((i: Json, n: number) => ({ src: i.key, alt: `${title} ${n + 1}`, caption: i.caption || i.name || `시안 ${n + 1}` })),
+      fromRequestId: id, status: "published", createdAt: at, updatedAt: at, createdBy: who,
+    };
+    const { error } = await supabase.from("docs").upsert({ collection: "marketing", id: assetId, data: marketing, updated_at: at });
+    if (error) throw error;
+    background(contentNotify("marketing", assetId, undefined, marketing, me, "admin"));
+  }
+  const history = Array.isArray(r.history) ? r.history.slice(-30) : [];
+  const next: Json = { ...r, status: "completed", progressPercent: 100, completedAt: at, updatedAt: at, resultAssetId: assetId, history: r.status === "completed" ? history : [...history, { status: "completed", at, by: who, note: images.length ? `완료 이미지 ${images.length}장 · 마케팅 제작물 등록` : "완료" }] };
+  await supabase.from("docs").upsert({ collection: "productionRequests", id, data: next, updated_at: at });
+  // 연결된 달력 일정도 완료로 (달력에서 사라짐)
+  const { data: links } = await supabase.from("docs").select("id,data").eq("collection", "productionSchedules").eq("data->>linkedRequestId", id);
+  for (const l of links ?? []) await supabase.from("docs").update({ data: { ...(l.data as Json), status: "completed", updatedAt: at }, updated_at: at }).eq("collection", "productionSchedules").eq("id", l.id);
+  if (r.status !== "completed" && r.createdById && r.createdById !== me.id) background(notify([r.createdById], { ...REQUEST_NOTES.completed(next), ref: `st-${id}-completed-${Date.now()}` }));
+  let drive: Json = { ok: false, reason: "no-images" };
+  if (images.length && body.toDrive !== false) {
+    drive = await driveUpload(images, ["학원 아카이브 제작물", kstToday().slice(0, 4), shortCampus(branch) || "공동", `${kstToday().slice(2).replaceAll("-", "")} ${title}`.slice(0, 90)]).catch((e) => ({ ok: false, reason: String(e) }));
+    if (drive.ok && drive.folderUrl) {
+      if (assetId) { const { data: a } = await supabase.from("docs").select("data").eq("collection", "marketing").eq("id", assetId).maybeSingle(); if (a) await supabase.from("docs").update({ data: { ...(a.data as Json), driveUrl: drive.folderUrl } }).eq("collection", "marketing").eq("id", assetId); }
+      await supabase.from("docs").update({ data: { ...next, driveUrl: drive.folderUrl } }).eq("collection", "productionRequests").eq("id", id);
+    }
+  }
+  return json({ ok: true, assetId, drive: { ok: !!drive.ok, url: drive.folderUrl ?? null, reason: drive.ok ? undefined : drive.reason ?? drive.error ?? "실패" } });
+}
+async function driveUpload(images: Json[], folderPath: string[]) {
+  const c = await config();
+  if (!c.mail_relay_url || !c.mail_relay_secret) return { ok: false, reason: "not-configured" };
+  const { data: signed } = await supabase.storage.from(BUCKET).createSignedUrls(images.map((i) => i.key), 60 * 30);
+  const urlOf = new Map((signed ?? []).map((x) => [x.path, x.signedUrl]));
+  const files = images.map((i, n) => ({ name: (i.name || `${n + 1}.${String(i.key).split(".").pop()}`).replace(/[\\/:*?"<>|]/g, "_"), url: urlOf.get(i.key) })).filter((f) => f.url);
+  const r = await fetch(c.mail_relay_url, { method: "POST", headers: { "content-type": "text/plain;charset=utf-8" }, body: JSON.stringify({ secret: c.mail_relay_secret, action: "drive", folderPath, files }), redirect: "follow", signal: AbortSignal.timeout(120_000) });
+  const text = await r.text();
+  try { const out = JSON.parse(text); if (!out.ok) console.error("[drive]", text.slice(0, 300)); return out; } catch { console.error("[drive]", r.status, text.slice(0, 200)); return { ok: false, reason: `HTTP ${r.status}` }; }
 }
 
 // ---------- 라우터 ----------
@@ -548,6 +645,7 @@ Deno.serve(async (req) => {
   try {
     if (path === "auth/apply") return await apply(body, ip);
     if (path === "auth/login") return await login(body, ip);
+    if (path === "passkey/client-error") { console.warn("[passkey-client]", JSON.stringify({ stage: String(body.stage ?? "").slice(0, 20), name: String(body.name ?? "").slice(0, 60), msg: String(body.msg ?? "").slice(0, 300), ua: String(body.ua ?? "").slice(0, 300) })); return json({ ok: true }); }
     if (path === "passkey/login-options") return await passkeyLoginOptions(req);
     if (path === "passkey/login-verify") return await passkeyLoginVerify(req, body, ip);
     if (path === "cron/daily") {
@@ -561,6 +659,8 @@ Deno.serve(async (req) => {
     if (!me) return json({ error: "인증이 필요합니다.", logout: true }, 401);
     const role: Role = me.is_admin ? "admin" : "staff";
     const principal = isPrincipal(me.title);
+    // 제작실 기금: 원장·이사·제작실장 + 비밀번호 재입력으로 받은 잠금 해제 표 (30분)
+    const fundOpen = canFund(me) && await fundTokenOk(req.headers.get("x-fund-token"), me.id);
 
     if (path === "ping") {
       await supabase.from("members").update({ last_seen: now() }).eq("id", me.id);
@@ -593,15 +693,17 @@ Deno.serve(async (req) => {
       return await adminDelete(body, me, ip);
     }
 
-    if (path === "fund/session") return json({ authenticated: principal });
-    if (path === "fund/config") return principal ? json({ accountLabel: (await config()).fund_account_label ?? "제작실 공동계좌" }) : json({ error: "제작실 기금은 원장·이사만 열람할 수 있습니다." }, 403);
+    if (path === "fund/session") return json({ authenticated: canFund(me), unlocked: fundOpen });
+    if (path === "fund/unlock") return await fundUnlock(body, me, ip);
+    if (path === "fund/config") return fundOpen ? json({ accountLabel: (await config()).fund_account_label ?? "제작실 공동계좌" }) : json({ error: "기금 잠금이 풀리지 않았어요.", fundLocked: canFund(me) }, 403);
+    if (path === "production/complete") return await productionComplete(body, me);
 
     if (path === "files/sign-upload") return await signUpload(body, role);
     if (path === "files/sign-read") return await signRead(body.keys);
 
-    if (path === "db/list") return COLLECTIONS.has(body.collection) ? await dbList(body.collection, role, principal) : json({ docs: [] });
-    if (path === "db/get") return COLLECTIONS.has(body.collection) ? await dbGet(body.collection, String(body.id ?? ""), role, principal) : json({ doc: null });
-    if (path === "db/set" || path === "db/update" || path === "db/delete") return await dbWrite(path.slice(3), body, role, principal, me);
+    if (path === "db/list") return COLLECTIONS.has(body.collection) ? await dbList(body.collection, role, principal, fundOpen) : json({ docs: [] });
+    if (path === "db/get") return COLLECTIONS.has(body.collection) ? await dbGet(body.collection, String(body.id ?? ""), role, principal, fundOpen) : json({ doc: null });
+    if (path === "db/set" || path === "db/update" || path === "db/delete") return await dbWrite(path.slice(3), body, role, fundOpen, me);
 
     // 읽음 확인 (누가 몇 명 확인했는지)
     if (path === "reads/mark" || path === "reads/counts" || path === "reads/list") {

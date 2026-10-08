@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Download, FileCheck2, LoaderCircle, LockKeyhole, Paperclip, Pencil, Plus, Trash2, Upload, WalletCards, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,6 +48,10 @@ const money = (v: string) => (digits(v) ? won.format(Number(digits(v))) : "");
 
 export function FundSection() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
+  const [unlocked, setUnlocked] = useState(fundApi.isUnlocked());
+  const [pin, setPin] = useState("");
+  const [pinMsg, setPinMsg] = useState("");
+  const [pinBusy, setPinBusy] = useState(false);
   const [data, setData] = useState<FundData | null>(null);
   const [reload, setReload] = useState(0);
   const [period, setPeriod] = useState("all");
@@ -64,19 +68,35 @@ export function FundSection() {
       .catch(() => setAuthenticated(false));
   }, []);
 
+  // 10분 동안 안 쓰면 다시 잠금
   useEffect(() => {
-    if (!authenticated) { setData(null); return; }
+    if (!unlocked) return;
+    const t = setInterval(() => { if (!fundApi.isUnlocked()) { setUnlocked(false); setData(null); toast.info("10분 동안 쓰지 않아 기금 화면을 잠갔어요."); } }, 20_000);
+    return () => clearInterval(t);
+  }, [unlocked]);
+  async function unlock(event: FormEvent) {
+    event.preventDefault();
+    if (!/^[0-9]{4}$/.test(pin)) { setPinMsg("비밀번호 숫자 4자리를 입력해 주세요."); return; }
+    setPinBusy(true); setPinMsg("");
+    try { await fundApi.unlock(pin); setPin(""); setUnlocked(true); }
+    catch (error) { setPinMsg(error instanceof Error ? error.message : "비밀번호를 확인해 주세요."); setPin(""); }
+    finally { setPinBusy(false); }
+  }
+
+  useEffect(() => {
+    if (!authenticated || !unlocked) { setData(null); return; }
     let stale = false;
     fetch("/api/fund", { cache: "no-store" })
       .then(async (response) => {
         if (response.status === 401) { setAuthenticated(false); return null; }
+        if (response.status === 423) { fundApi.lock(); setUnlocked(false); return null; }
         if (!response.ok) throw new Error("기금 내역을 불러오지 못했습니다.");
         return response.json() as Promise<FundData>;
       })
       .then((result) => { if (result && !stale) setData(result); })
       .catch((error) => toast.error(error instanceof Error ? error.message : "기금 내역을 불러오지 못했습니다."));
     return () => { stale = true; };
-  }, [authenticated, reload]);
+  }, [authenticated, unlocked, reload]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -120,7 +140,20 @@ export function FundSection() {
   if (authenticated === null) return <div className="grid min-h-[460px] place-items-center text-primary"><LoaderCircle className="size-7 animate-spin" /></div>;
 
   if (!authenticated) {
-    return <div className="grid min-h-[460px] place-items-center"><Card className="w-full max-w-md rounded-3xl border-border/80 px-2 py-2"><CardContent className="p-7 text-center sm:p-9"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand"><LockKeyhole className="size-7" /></div><h2 className="mt-6 text-2xl font-semibold">제작실 기금</h2><p className="mt-3 leading-7 text-muted-foreground">제작실 기금은 직책이 원장·이사인 교직원만 열람할 수 있습니다.</p></CardContent></Card></div>;
+    return <div className="grid min-h-[460px] place-items-center"><Card className="w-full max-w-md rounded-3xl border-border/80 px-2 py-2"><CardContent className="p-7 text-center sm:p-9"><div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand"><LockKeyhole className="size-7" /></div><h2 className="mt-6 text-2xl font-semibold">제작실 기금</h2><p className="mt-3 leading-7 text-muted-foreground">제작실 기금은 직책이 원장·이사·제작실장인 교직원만 열람할 수 있습니다.</p></CardContent></Card></div>;
+  }
+
+  if (!unlocked) {
+    return <div className="grid min-h-[460px] place-items-center"><Card className="w-full max-w-md rounded-3xl border-border/80 px-2 py-2"><CardContent className="p-7 text-center sm:p-9">
+      <div className="mx-auto grid size-14 place-items-center rounded-2xl bg-brand-soft text-brand"><LockKeyhole className="size-7" /></div>
+      <h2 className="mt-6 text-2xl font-semibold">제작실 기금 잠금</h2>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">보안을 위해 <b className="text-foreground">로그인 비밀번호 4자리</b>를 한 번 더 입력해 주세요.<br />10분 동안 쓰지 않으면 다시 잠겨요.</p>
+      <form className="mt-6 space-y-3" onSubmit={unlock}>
+        <Input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))} type="password" inputMode="numeric" autoComplete="current-password" autoFocus maxLength={4} placeholder="••••" aria-label="비밀번호 4자리" className="h-14 rounded-xl text-center text-2xl tracking-[0.6em]" />
+        {pinMsg && <p className="text-sm text-rose-600" role="alert">{pinMsg}</p>}
+        <Button className="h-12 w-full rounded-xl text-base" disabled={pinBusy || pin.length !== 4}>{pinBusy ? <LoaderCircle className="size-4 animate-spin" /> : <LockKeyhole className="size-4" />}잠금 풀기</Button>
+      </form>
+    </CardContent></Card></div>;
   }
 
   if (!data) return <div className="grid min-h-[460px] place-items-center text-primary"><LoaderCircle className="size-7 animate-spin" /></div>;
@@ -132,11 +165,12 @@ export function FundSection() {
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 rounded-2xl border border-border/80 bg-card p-4 shadow-[0_10px_35px_rgba(38,33,28,0.06)] lg:flex-row lg:items-center lg:justify-between">
-        <div><div className="flex items-center gap-2"><p className="font-semibold">{data.accountLabel}</p>{data.demo && <Badge variant="secondary" className="rounded-full">샘플 데이터</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">원장·이사 계정에서만 표시되는 정보입니다. 잔액은 날짜 순서대로 자동 계산돼요.</p></div>
+        <div><div className="flex items-center gap-2"><p className="font-semibold">{data.accountLabel}</p>{data.demo && <Badge variant="secondary" className="rounded-full">샘플 데이터</Badge>}</div><p className="mt-1 text-sm text-muted-foreground">원장·이사·제작실장 계정에서만 표시되는 정보입니다. 잔액은 날짜 순서대로 자동 계산돼요.</p></div>
         <div className="grid grid-cols-3 gap-2 sm:flex">
           <Button variant="outline" className="h-10 rounded-xl px-3" disabled={!!busy} onClick={template}>{busy === "template" ? <LoaderCircle className="size-4 animate-spin" /> : <Download className="size-4" />}<span><span className="sm:hidden">양식 받기</span><span className="hidden sm:inline">양식 다운로드</span></span></Button>
           <Button variant="outline" className="h-10 rounded-xl px-3" disabled={!!busy} onClick={() => fileRef.current?.click()}>{busy === "parse" ? <LoaderCircle className="size-4 animate-spin" /> : <Upload className="size-4" />}<span><span className="sm:hidden">올리기</span><span className="hidden sm:inline">양식 업로드</span></span></Button>
           <Button className="h-10 rounded-xl px-3" disabled={!!busy} onClick={openNew}><Plus className="size-4" />추가</Button>
+          <Button variant="ghost" className="col-span-3 h-10 rounded-xl px-3 text-muted-foreground sm:col-span-1" onClick={() => { fundApi.lock(); setUnlocked(false); setData(null); }}><LockKeyhole className="size-4" />잠그기</Button>
           <input ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden" onChange={(e) => pickFile(e.target.files?.[0])} />
         </div>
       </div>
