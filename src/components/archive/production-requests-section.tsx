@@ -4,8 +4,9 @@ import { markRead, ReadBadge } from "./read-badge";
 import Image from "next/image";
 import { fileUrl, getMe } from "@/archive-api";
 import { CampusDot, campusColor } from "@/lib/campus";
+import { downloadImage } from "@/lib/image-tools";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Images, X, Pencil, Upload, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Eye, FileText, ImagePlus, LoaderCircle, Lock, Plus, Send, ShieldCheck, Trash2 } from "lucide-react";
+import { Download, Images, X, Pencil, Upload, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, ExternalLink, Eye, FileText, ImagePlus, LoaderCircle, Lock, Plus, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { MarketingPicker, takeRequestPrefill, type PickedRef } from "./marketing-picker";
 
@@ -533,6 +534,7 @@ function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onO
   const [editing, setEditing] = useState<Partial<ProductionRequest> | null>(null);
   const [caption, setCaption] = useState("");
   const [viewer, setViewer] = useState<ProgressImage | null>(null);
+  const [refIndex, setRefIndex] = useState<number | null>(null);
   useEffect(() => { setConfirmDelete(false); setEditing(null); setCaption(""); if (item && !item.demo) void markRead("productionRequests", item.id); }, [item?.id]);
   if (!item) return null;
   const due = effectiveDue(item);
@@ -568,7 +570,7 @@ function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onO
     </div>}
 
     {item.refAssets?.length ? <div className="flex flex-wrap items-center gap-1.5 text-sm"><span className="text-muted-foreground">참고한 제작물</span>{item.refAssets.map((a) => <button key={a.id} type="button" onClick={() => { setItem(null); onOpenMarketing(a.id); }} className="inline-flex items-center gap-1 rounded-full border border-primary/40 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10"><Images className="size-3.5" />{a.title}</button>)}</div> : null}
-    {item.referenceImages?.length ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{item.referenceImages.slice(0, 8).map((image, index) => <div key={`${image.src}-${index}`} className="relative aspect-square overflow-hidden rounded-lg bg-muted"><Image src={image.src} alt={image.name ?? "참고 이미지"} fill unoptimized className="object-cover" /></div>)}</div> : null}
+    {item.referenceImages?.length ? <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">{item.referenceImages.map((image, index) => <button key={`${image.src}-${index}`} type="button" onClick={() => setRefIndex(index)} className="relative aspect-square cursor-zoom-in overflow-hidden rounded-lg bg-muted" aria-label={`참고 이미지 ${index + 1} 크게 보기`}><Image src={image.src} alt={image.name ?? "참고 이미지"} data-download-name={image.name} fill unoptimized className="object-cover" /></button>)}</div> : null}
 
     {editing ? <div className="space-y-3 rounded-xl border-2 border-primary/15 p-4">
       <p className="flex items-center gap-1.5 text-sm font-semibold"><Pencil className="size-4 text-primary" />요청 고치기</p>
@@ -618,7 +620,8 @@ function RequestDialog({ item, setItem, canManage, saving, onSave, onDelete, onO
       {item.status === "completed" && <Button variant="outline" className="h-11 sm:h-10" onClick={() => { setItem(null); onOpenMarketing(item.resultAssetId ?? undefined); }}><FileText />제작물 보기</Button>}
       {canManage && <Button className="h-11 sm:h-10" onClick={() => onSave()} disabled={saving}>{saving && <LoaderCircle className="animate-spin" />}저장</Button>}
     </DialogFooter>
-    {viewer && <Dialog open onOpenChange={(open) => !open && setViewer(null)}><DialogContent className="sm:max-w-3xl"><DialogHeader className="text-left"><DialogTitle>{viewer.caption || viewer.name || "진행 이미지"}</DialogTitle><DialogDescription>{stamp(viewer.at)}{viewer.by ? ` · ${viewer.by}` : ""}</DialogDescription></DialogHeader>{viewer.src && <img src={viewer.src} alt={viewer.caption || "진행 이미지"} className="max-h-[70vh] w-full rounded-lg object-contain" />}</DialogContent></Dialog>}
+    {refIndex !== null && item.referenceImages?.[refIndex] && <ReferenceViewer images={item.referenceImages} index={refIndex} setIndex={setRefIndex} />}
+    {viewer && <Dialog open onOpenChange={(open) => !open && setViewer(null)}><DialogContent className="sm:max-w-3xl"><DialogHeader className="text-left"><DialogTitle>{viewer.caption || viewer.name || "진행 이미지"}</DialogTitle><DialogDescription>{stamp(viewer.at)}{viewer.by ? ` · ${viewer.by}` : ""}</DialogDescription></DialogHeader>{viewer.src && <div data-zoomable className="relative overflow-hidden rounded-lg"><img src={viewer.src} alt={viewer.caption || "진행 이미지"} data-download-name={viewer.name} className="max-h-[70vh] w-full object-contain" /></div>}</DialogContent></Dialog>}
   </DialogContent></Dialog>;
 }
 
@@ -750,3 +753,35 @@ function ScheduleDialog({ item, setItem, canManage, saving, onSave, onDelete, ex
 function RequestField({ label, name, ...props }: { label: string; name: string } & React.ComponentProps<typeof Input>) { return <div className="space-y-2"><Label htmlFor={name}>{label}</Label><Input id={name} name={name} className="h-11 rounded-xl sm:h-9" {...props} /></div>; }
 function RequestText({ label, name, ...props }: { label: string; name: string } & React.ComponentProps<typeof Textarea>) { return <div className="space-y-2"><Label htmlFor={name}>{label}</Label><Textarea id={name} name={name} className="min-h-24 rounded-xl" {...props} /></div>; }
 function RequestSelect({ label, name, items, defaultValue }: { label: string; name: string; items: (readonly [string, string])[]; defaultValue?: string }) { return <div className="space-y-2"><Label>{label}</Label><Select name={name} defaultValue={defaultValue ?? items[0]?.[0]}><SelectTrigger className="h-11 rounded-xl sm:h-9"><SelectValue /></SelectTrigger><SelectContent>{items.map(([value, text]) => <SelectItem key={value} value={value}>{text}</SelectItem>)}</SelectContent></Select></div>; }
+
+function ReferenceViewer({ images, index, setIndex }: { images: ReferenceImage[]; index: number; setIndex: (index: number | null) => void }) {
+  const image = images[index];
+  const move = (step: number) => setIndex((index + step + images.length) % images.length);
+  useEffect(() => {
+    if (images.length < 2) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "ArrowLeft") move(-1); if (event.key === "ArrowRight") move(1); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+  return <Dialog open onOpenChange={(open) => !open && setIndex(null)}>
+    <DialogContent showCloseButton={false} className="h-[100dvh] w-screen max-w-none gap-0 rounded-none border-0 bg-black p-0 text-white shadow-none sm:max-w-none">
+      <DialogTitle className="sr-only">참고 이미지 크게 보기</DialogTitle>
+      <div className="relative h-full w-full">
+        <Image key={image.src} src={image.src} alt={image.name ?? "참고 이미지"} data-download-name={image.name} fill unoptimized style={{ objectFit: "contain" }} className="object-contain object-center p-4 md:p-8" />
+        <div className="absolute right-5 top-5 flex gap-2">
+          <button type="button" onClick={() => downloadImage(image.src, image.name ?? `참고 이미지 ${index + 1}`)} className="grid size-11 place-items-center rounded-full bg-black/65 text-white backdrop-blur transition hover:bg-white/20" aria-label="다운로드" title="다운로드"><Download className="size-5" /></button>
+          <button type="button" onClick={() => setIndex(null)} className="grid size-11 place-items-center rounded-full bg-black/65 text-white backdrop-blur transition hover:bg-white/20" aria-label="닫기"><X className="size-5" /></button>
+        </div>
+        {images.length > 1 && <>
+          <button type="button" onClick={() => move(-1)} className="absolute left-4 top-1/2 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-black/65 text-white backdrop-blur transition hover:bg-white/20" aria-label="이전 이미지"><ChevronLeft className="size-7" /></button>
+          <button type="button" onClick={() => move(1)} className="absolute right-4 top-1/2 grid size-12 -translate-y-1/2 place-items-center rounded-full bg-black/65 text-white backdrop-blur transition hover:bg-white/20" aria-label="다음 이미지"><ChevronRight className="size-7" /></button>
+        </>}
+        <div className="absolute bottom-5 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full bg-black/65 px-4 py-2 text-sm backdrop-blur">
+          <span className="max-w-[50vw] truncate">{image.name ?? "참고 이미지"}</span>
+          <span className="text-white/55">{index + 1} / {images.length}</span>
+          <span className="hidden text-white/55 md:inline">· 휠로 확대/축소</span>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>;
+}

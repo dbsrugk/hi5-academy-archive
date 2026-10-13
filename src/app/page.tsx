@@ -5,6 +5,7 @@ import { NotificationCenter } from "@/components/archive/notification-center";
 import { ProfileDialog } from "@/components/archive/profile-dialog";
 import Image from "next/image";
 import { CampusDot, CampusLabel, campusColor, campusShort } from "@/lib/campus";
+import { installImageTools } from "@/lib/image-tools";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Archive,
@@ -1218,13 +1219,13 @@ export default function Home() {
     }
   }, [role, section]);
 
-  // 이미지 우클릭·드래그 저장 방지 (상세 팝업 포함)
+  // 사진 확대(휠)·오른쪽 클릭 다운로드, 드래그로 끌어내기는 막음 (상세 팝업 포함)
   useEffect(() => {
     if (!role) return;
+    installImageTools();
     const block = (event: Event) => { if ((event.target as HTMLElement | null)?.tagName === "IMG") event.preventDefault(); };
-    document.addEventListener("contextmenu", block);
     document.addEventListener("dragstart", block);
-    return () => { document.removeEventListener("contextmenu", block); document.removeEventListener("dragstart", block); };
+    return () => { document.removeEventListener("dragstart", block); };
   }, [role]);
 
   // 접속·열람 기록 (2분마다 접속 신호)
