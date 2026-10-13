@@ -2,7 +2,7 @@
 
 // 📥 자료함 — 대화창처럼: 누구나 파일을 보내기만 하면 끝, 관리자가 확인 도장·반응·정리 표시
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCheck, Download, FileArchive, FileImage, FileText, FileVideo, FolderOpen, LoaderCircle, Paperclip, Send, Trash2, X } from "lucide-react";
+import { CheckCheck, Download, ExternalLink, FileArchive, FileImage, FileText, FileVideo, FolderOpen, LoaderCircle, Paperclip, Send, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { getMe, inboxApi, type InboxFile, type InboxItem } from "@/archive-api";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { campusColor } from "@/lib/campus";
 
 const REACTIONS = ["👍", "❤️", "🙏", "🎉", "😂"];
-const MAX = 50 * 1024 * 1024;
+const MAX = 10 * 1024 * 1024 * 1024; // 구글 드라이브로 바로 가니 10GB까지
 
 const sizeText = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`);
 const timeText = (iso: string) => { const d = new Date(iso); const h = d.getHours(); return `${h < 12 ? "오전" : "오후"} ${h % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}`; };
@@ -46,7 +46,7 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
   function addFiles(list: FileList | File[] | null) {
     const files = Array.from(list ?? []);
     const big = files.filter((f) => f.size > MAX);
-    if (big.length) toast.error(`50MB가 넘는 파일 ${big.length}개는 뺐어요. 큰 파일은 구글 드라이브로 보내 주세요.`);
+    if (big.length) toast.error(`10GB가 넘는 파일 ${big.length}개는 뺐어요.`);
     setPicked((cur) => [...cur, ...files.filter((f) => f.size <= MAX)].slice(0, 50));
   }
   // 캡처한 이미지 붙여넣기(Ctrl+V)도 받기
@@ -60,18 +60,22 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
     if (!picked.length) { fileRef.current?.click(); return; }
     setSending({ done: 0, total: picked.length, pct: 0 });
     try {
-      // 3개씩 동시에 올리기 (순서는 그대로)
+      // 구글 드라이브로 바로: 첫 파일이 폴더를 만들고, 나머지는 같은 폴더에 3개씩 동시에
       const uploaded: InboxFile[] = new Array(picked.length);
-      let next = 0, done = 0;
-      const pcts = new Array(picked.length).fill(0);
-      const tick = () => setSending({ done, total: picked.length, pct: Math.round(pcts.reduce((a, b) => a + b, 0) / picked.length) });
-      await Promise.all(Array.from({ length: Math.min(3, picked.length) }, async () => {
+      const total = picked.reduce((sum, f) => sum + f.size, 0) || 1;
+      const sent = new Array(picked.length).fill(0);
+      let done = 0;
+      const tick = () => setSending({ done, total: picked.length, pct: Math.round((sent.reduce((a, b) => a + b, 0) / total) * 100) });
+      const first = await inboxApi.upload(picked[0], null, (pct) => { sent[0] = (picked[0].size * pct) / 100; tick(); });
+      uploaded[0] = first; done = 1; tick();
+      let next = 1;
+      await Promise.all(Array.from({ length: Math.min(3, picked.length - 1) }, async () => {
         for (let i = next++; i < picked.length; i = next++) {
-          uploaded[i] = await inboxApi.upload(picked[i], (pct) => { pcts[i] = pct; tick(); });
-          pcts[i] = 100; done++; tick();
+          uploaded[i] = await inboxApi.upload(picked[i], first.folderId, (pct) => { sent[i] = (picked[i].size * pct) / 100; tick(); });
+          sent[i] = picked[i].size; done++; tick();
         }
       }));
-      await inboxApi.send(uploaded, memo);
+      await inboxApi.send(uploaded, memo, first.folderUrl);
       setPicked([]); setMemo("");
       toast.success(admin ? "📨 자료함에 올렸어요." : "📨 보냈어요! 관리자에게 알림이 갔어요.");
       await load(true);
@@ -97,12 +101,13 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
     try {
       await (queue.current.get(item.id) ?? Promise.resolve());
       await inboxApi.done(item.id, note); setDoneFor(null);
-      setItems((cur) => cur?.map((x) => x.id === item.id ? { ...x, status: "done", doneNote: note, doneAt: new Date().toISOString(), fileNames: x.files.map((f) => f.name), files: [] } : x) ?? cur);
-      toast.success("✅ 정리 완료! 사이트에 있던 파일은 지웠어요."); void load();
+      setItems((cur) => cur?.map((x) => x.id === item.id ? { ...x, status: "done", doneNote: note, doneAt: new Date().toISOString(), fileNames: x.files.map((f) => f.name), files: x.files.filter((f) => f.driveId) } : x) ?? cur);
+      toast.success("✅ 정리 완료 도장을 찍었어요."); void load();
     }
     catch { toast.error("정리 표시를 하지 못했어요."); }
   }
   function downloadAll(item: InboxItem) {
+    if (item.folderUrl) { window.open(item.folderUrl, "_blank", "noopener"); return; }
     item.files.forEach((f, i) => setTimeout(() => { const url = inboxApi.downloadUrl(f); if (!url) return; const a = document.createElement("a"); a.href = url; a.download = f.name; a.rel = "noreferrer"; document.body.appendChild(a); a.click(); a.remove(); }, i * 700));
     toast.info(`${item.files.length}개 내려받기를 시작했어요. 브라우저가 '여러 파일 다운로드'를 물으면 허용해 주세요.`);
   }
@@ -135,7 +140,8 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
         const mine = item.createdById === me?.id;
         const day = dayText(item.createdAt);
         const showDay = day !== lastDay; lastDay = day;
-        const images = item.files.filter(isImage), others = item.files.filter((f) => !isImage(f));
+        // 예전(사이트 저장) 사진만 미리보기, 드라이브로 간 파일은 이름·크기 기록 + 드라이브 링크
+        const images = item.files.filter((f) => f.key && isImage(f)), others = item.files.filter((f) => !(f.key && isImage(f)));
         const done = item.status === "done";
         return <div key={item.id}>
           {showDay && <div className="my-3 flex justify-center"><span className="rounded-full bg-black/10 px-3 py-1 text-[11px] text-foreground/70 dark:bg-white/10">{day}</span></div>}
@@ -160,8 +166,8 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
                       {i === 8 && images.length > 9 && <span className="absolute inset-0 grid place-items-center bg-black/55 text-lg font-bold text-white">+{images.length - 9}</span>}
                     </button>)}
                   </div>}
-                  {!done && others.length > 0 && <div className="space-y-1 p-2">{others.map((f) => <a key={f.key} href={inboxApi.downloadUrl(f) ?? undefined} target="_blank" rel="noreferrer" className={`flex items-center gap-2 rounded-xl px-2.5 py-2 text-sm ${mine ? "bg-black/5 hover:bg-black/10" : "bg-muted/60 hover:bg-muted"}`}><FileIcon f={f} /><span className="min-w-0 flex-1 truncate">{f.name}</span><span className="shrink-0 text-[11px] opacity-60">{sizeText(f.size)}</span><Download className="size-4 shrink-0 opacity-60" /></a>)}</div>}
-                  {done && <p className="px-3 pb-2.5 text-sm leading-6 opacity-80">📦 파일 {item.fileNames?.length ?? 0}개는 정리해서 옮겼어요.{item.doneNote ? <><br /><b>→ {item.doneNote}</b></> : null}</p>}
+                  {others.length > 0 && <div className={`space-y-1 p-2 ${done ? "opacity-70" : ""}`}>{others.slice(0, done ? 3 : 50).map((f, n) => { const href = f.driveId ? (admin ? f.url : null) : inboxApi.downloadUrl(f); const body = <><span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/70 text-foreground/70"><FileIcon f={f} /></span><span className="min-w-0 flex-1"><span className="block truncate">{f.name}</span><span className="block text-[11px] opacity-60">{sizeText(f.size)}{f.driveId ? " · 구글 드라이브" : ""}</span></span>{href && (f.driveId ? <ExternalLink className="size-4 shrink-0 opacity-60" /> : <Download className="size-4 shrink-0 opacity-60" />)}</>; const cls = `flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm ${mine ? "bg-black/5" : "bg-muted/60"} ${href ? (mine ? "hover:bg-black/10" : "hover:bg-muted") : ""}`; return href ? <a key={`${f.driveId ?? f.key}-${n}`} href={href} target="_blank" rel="noreferrer" className={cls}>{body}</a> : <div key={`${f.driveId ?? f.key}-${n}`} className={cls}>{body}</div>; })}{done && others.length > 3 && <p className="px-1 text-[11px] opacity-60">외 {others.length - 3}개</p>}</div>}
+                  {done && <p className="px-3 pb-2.5 text-sm leading-6 opacity-80">📦 파일 {item.fileNames?.length ?? 0}개 정리 완료.{item.doneNote ? <><br /><b>→ {item.doneNote}</b></> : null}</p>}
                   <div className="px-3 pb-2 text-[10px] opacity-50">{done ? `정리 ${item.doneAt ? dayText(item.doneAt) : ""}` : `파일 ${item.files.length}개 · ${sizeText(item.files.reduce((s, f) => s + f.size, 0))}`}{item.checkedBy && !done ? ` · ${item.checkedBy} 확인` : ""}</div>
                 </div>
               </div>
@@ -169,7 +175,7 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
               {admin && !done && <div className={`mt-1.5 flex flex-wrap items-center gap-1 ${mine ? "justify-end" : ""}`}>
                 {!item.checkedAt && <button type="button" onClick={() => check(item, item.reaction ?? null)} className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-primary shadow-xs hover:bg-primary hover:text-primary-foreground">👀 확인</button>}
                 {REACTIONS.map((r) => <button key={r} type="button" aria-label={`${r} 반응`} onClick={() => check(item, item.reaction === r ? null : r)} className={`grid size-7 place-items-center rounded-full text-sm shadow-xs transition hover:scale-125 ${item.reaction === r ? "bg-amber-200 ring-2 ring-amber-400" : "bg-card"}`}>{r}</button>)}
-                {item.files.length > 0 && <button type="button" onClick={() => downloadAll(item)} className="rounded-full bg-card px-2.5 py-1 text-xs shadow-xs hover:bg-muted"><Download className="mr-0.5 inline size-3.5" />모두 받기</button>}
+                {item.files.length > 0 && <button type="button" onClick={() => downloadAll(item)} className="rounded-full bg-card px-2.5 py-1 text-xs shadow-xs hover:bg-muted">{item.folderUrl ? <><FolderOpen className="mr-0.5 inline size-3.5" />드라이브 폴더 열기</> : <><Download className="mr-0.5 inline size-3.5" />모두 받기</>}</button>}
                 <button type="button" onClick={() => setDoneFor(item)} className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700"><CheckCheck className="mr-0.5 inline size-3.5" />정리 완료</button>
                 <button type="button" aria-label="지우기" onClick={() => void remove(item)} className="grid size-7 place-items-center rounded-full bg-card text-muted-foreground shadow-xs hover:text-rose-600"><Trash2 className="size-3.5" /></button>
               </div>}
@@ -198,7 +204,7 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
           className="max-h-28 min-h-11 flex-1 resize-none rounded-2xl border bg-background px-3.5 py-2.5 text-sm outline-none focus:border-primary" />
         <Button type="button" className="size-11 shrink-0 rounded-full p-0" disabled={!!sending} onClick={() => void send()} aria-label="보내기">{sending ? <LoaderCircle className="size-5 animate-spin" /> : <Send className="size-5" />}</Button>
       </div>
-      <p className="mt-1.5 text-center text-[11px] text-muted-foreground">사진·영상·PSD·PDF 무엇이든 · 파일당 50MB까지 · 캡처 이미지는 Ctrl+V로 붙여넣기</p>
+      <p className="mt-1.5 text-center text-[11px] text-muted-foreground">사진·영상·PSD·PDF 무엇이든 · 큰 파일도 OK (구글 드라이브로 바로 저장) · 캡처는 Ctrl+V</p>
     </div>
 
     {viewer && <Dialog open onOpenChange={(open) => !open && setViewer(null)}><DialogContent className="sm:max-w-4xl"><DialogHeader className="text-left"><DialogTitle className="truncate pr-6">{viewer.name}</DialogTitle><DialogDescription>{sizeText(viewer.size)}</DialogDescription></DialogHeader>{viewer.url && <img src={viewer.url} alt={viewer.name} className="max-h-[72vh] w-full rounded-lg object-contain" />}<a href={inboxApi.downloadUrl(viewer) ?? undefined} className="inline-flex items-center justify-center gap-1.5 rounded-xl border px-4 py-2 text-sm hover:bg-muted"><Download className="size-4" />원본 내려받기</a></DialogContent></Dialog>}
@@ -207,14 +213,14 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
 }
 
 function confirmDelete(item: InboxItem) {
-  return window.confirm(`'${item.title}' 묶음을 지울까요?\n사이트에 올라온 파일 ${item.files.length}개도 함께 지워져요.`);
+  return window.confirm(`'${item.title}' 기록을 지울까요?\n${item.files.some((f) => f.driveId) ? "구글 드라이브의 원본은 그대로 남아요." : `사이트에 올라온 파일 ${item.files.length}개도 함께 지워져요.`}`);
 }
 
 function DoneDialog({ item, onClose, onDone }: { item: InboxItem; onClose: () => void; onDone: (note: string) => void }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   return <Dialog open onOpenChange={(open) => !open && !busy && onClose()}><DialogContent className="sm:max-w-md">
-    <DialogHeader className="text-left"><DialogTitle>✅ 정리 완료로 표시할까요?</DialogTitle><DialogDescription>사이트에 올라온 파일 {item.files.length}개는 지워지고, 대화에는 '정리 완료' 도장과 한마디만 남아요. 드라이브나 다른 메뉴로 옮긴 뒤에 눌러 주세요.</DialogDescription></DialogHeader>
+    <DialogHeader className="text-left"><DialogTitle>✅ 정리 완료로 표시할까요?</DialogTitle><DialogDescription>대화에 '정리 완료' 도장과 한마디가 남아요. 원본은 구글 드라이브에 그대로 있어요.</DialogDescription></DialogHeader>
     <div className="flex flex-wrap gap-1.5">{["이벤트에 올렸어요", "마케팅 제작물에 올렸어요", "드라이브에 보관했어요", "회의록에 올렸어요"].map((t) => <button key={t} type="button" onClick={() => setNote(t)} className={`rounded-full border px-2.5 py-1 text-xs ${note === t ? "border-primary bg-primary text-primary-foreground" : "hover:bg-muted"}`}>{t}</button>)}</div>
     <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="어디로 옮겼는지 한마디 (선택)" className="h-11 w-full rounded-xl border bg-background px-3 text-sm outline-none focus:border-primary" />
     <div className="flex justify-end gap-2"><Button variant="outline" disabled={busy} onClick={onClose}>취소</Button><Button disabled={busy} className="bg-emerald-600 hover:bg-emerald-700" onClick={() => { setBusy(true); onDone(note.trim()); }}>{busy ? <LoaderCircle className="animate-spin" /> : <CheckCheck />}정리 완료</Button></div>

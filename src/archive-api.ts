@@ -559,44 +559,47 @@ export const fundApi = {
 };
 
 // ---------- 자료함 (누구나 올리기만 → 관리자가 확인·정리) ----------
-export type InboxFile = { key: string; name: string; size: number; type: string; url?: string | null };
+export type InboxFile = { key?: string; driveId?: string; name: string; size: number; type: string; url?: string | null };
 export type InboxItem = {
-  id: string; title: string; memo: string; files: InboxFile[]; fileNames?: string[]; createdById?: string; uploader: string; campus: string; createdAt: string;
+  id: string; title: string; memo: string; files: InboxFile[]; folderUrl?: string; fileNames?: string[]; createdById?: string; uploader: string; campus: string; createdAt: string;
   checkedAt?: string | null; checkedBy?: string | null; reaction?: string | null; status?: "new" | "done"; doneNote?: string; doneAt?: string;
 };
 export const inboxApi = {
   async list(): Promise<InboxItem[]> {
     const rows = await all("inbox");
-    await ensureBlobs(rows.flatMap((r) => (Array.isArray(r.files) ? r.files.map((f: Json) => f.key) : [])));
+    await ensureBlobs(rows.flatMap((r) => (Array.isArray(r.files) ? r.files.map((f: Json) => f.key).filter(Boolean) : [])));
     return rows.map((r) => ({
       id: r.id, title: String(r.title ?? ""), memo: String(r.memo ?? ""), uploader: String(r.uploader ?? ""), campus: String(r.campus ?? ""), createdAt: String(r.createdAt ?? ""), createdById: r.createdById,
-      files: (Array.isArray(r.files) ? r.files : []).map((f: Json) => ({ key: String(f.key), name: String(f.name ?? f.key), size: Number(f.size ?? 0) || 0, type: String(f.type ?? ""), url: fileUrl(String(f.key)) })),
+      folderUrl: String(r.folderUrl ?? ""),
+      files: (Array.isArray(r.files) ? r.files : []).map((f: Json) => f.driveId
+        ? { driveId: String(f.driveId), name: String(f.name ?? ""), size: Number(f.size ?? 0) || 0, type: String(f.type ?? ""), url: String(f.url ?? `https://drive.google.com/file/d/${f.driveId}/view`) }
+        : { key: String(f.key), name: String(f.name ?? f.key), size: Number(f.size ?? 0) || 0, type: String(f.type ?? ""), url: fileUrl(String(f.key)) }),
       fileNames: Array.isArray(r.fileNames) ? r.fileNames : undefined, checkedAt: r.checkedAt ?? null, checkedBy: r.checkedBy ?? null, reaction: r.reaction ?? null, status: (r.status === "done" ? "done" : "new") as "done" | "new", doneNote: r.doneNote ?? "", doneAt: r.doneAt ?? "",
     })).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   },
-  /** 파일 하나 올리기 (50MB까지, 종류 상관없음) */
-  async upload(file: File, onProgress?: (pct: number) => void): Promise<InboxFile> {
-    const signed = await call("files/sign-upload", { name: file.name, type: file.type || "application/octet-stream", size: file.size, purpose: "inbox" });
-    await new Promise<void>((resolve, reject) => {
+  /** 파일 하나를 구글 드라이브로 바로 올리기 (용량 제한 없음). 같은 묶음은 folderId를 넘겨 한 폴더에 */
+  async upload(file: File, folderId: string | null, onProgress?: (pct: number) => void): Promise<InboxFile & { folderId: string; folderUrl: string }> {
+    const start = await call("drive/start", { name: file.name, size: file.size, type: file.type || "application/octet-stream", folderId });
+    if (!start.ok) throw new Error(start.msg ?? "드라이브에 올릴 준비를 하지 못했어요.");
+    const res = await new Promise<Json>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open("PUT", signed.signedUrl);
+      xhr.open("PUT", start.uploadUrl);
       xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
-      xhr.setRequestHeader("x-upsert", "false");
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100)); };
-      xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`'${file.name}'을(를) 올리지 못했어요.`)));
-      xhr.onerror = () => reject(new Error(`'${file.name}'을(를) 올리지 못했어요. 연결을 확인해 주세요.`));
+      xhr.onload = () => { if (xhr.status === 200 || xhr.status === 201) { try { resolve(JSON.parse(xhr.responseText || "{}")); } catch { resolve({}); } } else reject(new Error(`'${file.name}'을(를) 드라이브에 올리지 못했어요. (${xhr.status})`)); };
+      xhr.onerror = () => reject(new Error(`'${file.name}'을(를) 올리다 연결이 끊겼어요. 다시 보내 주세요.`));
       xhr.send(file);
     });
-    if (file.type.startsWith("image/")) fileCache.set(signed.key, { url: URL.createObjectURL(file), at: Date.now() });
-    return { key: String(signed.key), name: file.name, size: file.size, type: file.type };
+    const driveId = String(res.id ?? "");
+    return { driveId, name: file.name, size: file.size, type: file.type, url: String(res.webViewLink ?? (driveId ? `https://drive.google.com/file/d/${driveId}/view` : start.folderUrl)), folderId: String(start.folderId), folderUrl: String(start.folderUrl ?? "") };
   },
-  async send(files: InboxFile[], memo: string) {
+  async send(files: InboxFile[], memo: string, folderUrl = "") {
     const me = getMe();
     const d = new Date(Date.now() + 9 * 3600_000);
     const campus = me ? (me.campus === "전체" ? "이사" : me.campus) : "";
     const title = `${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")} ${campus} ${me?.name ?? ""}`.trim();
     const id = "ib-" + crypto.randomUUID().replaceAll("-", "").slice(0, 20);
-    await setDoc("inbox", id, { title, memo: memo.trim().slice(0, 500), files: files.map(({ url: _u, ...f }) => f), uploader: me?.name ?? "", campus, createdAt: now(), status: "new" });
+    await setDoc("inbox", id, { title, memo: memo.trim().slice(0, 500), files: files.map((f) => ({ driveId: f.driveId, name: f.name, size: f.size, type: f.type, url: f.url })), folderUrl, uploader: me?.name ?? "", campus, createdAt: now(), status: "new" });
     return id;
   },
   /** 확인 도장 + 반응 (반응만 바꿔도 도장 정보를 같이 보내서, 연달아 눌러도 서로 덮어쓰지 않게) */

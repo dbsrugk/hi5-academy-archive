@@ -559,7 +559,7 @@ async function dbWrite(op: string, body: Json, baseRole: Role, fundOpen: boolean
     const keys = old.map((f: Json) => String(f.key ?? "")).filter((k: string) => /^[a-f0-9-]+\.[a-z0-9]{1,8}$/.test(k));
     if (keys.length) { const { error: rmError } = await supabase.storage.from(BUCKET).remove(keys); if (rmError) console.error("[inbox]", rmError); }
     next.fileNames = old.map((f: Json) => String(f.name ?? "")).slice(0, 200);
-    next.files = [];
+    next.files = old.filter((f: Json) => f.driveId); // 드라이브에 있는 원본 링크는 기록으로 남긴다
     next.doneAt = now();
     if (next.createdById && next.createdById !== me.id) background(notify([next.createdById], { kind: "inbox", title: "📥 올린 자료가 정리됐어요", body: `${String(next.title ?? "")}${next.doneNote ? ` · ${String(next.doneNote).slice(0, 100)}` : ""}`, link: "#inbox", ref: `inbox-done-${id}` }));
   }
@@ -668,6 +668,30 @@ async function driveUpload(images: Json[], folderPath: string[]) {
   try { const out = JSON.parse(text); if (!out.ok) console.error("[drive]", text.slice(0, 300)); return out; } catch { console.error("[drive]", r.status, text.slice(0, 200)); return { ok: false, reason: `HTTP ${r.status}` }; }
 }
 
+// ---------- 자료함: 브라우저 → 구글 드라이브 바로 올리기 ----------
+// 서버(Apps Script)가 경학님 드라이브에 '업로드 창구(세션 주소)'만 열어 주고, 파일은 브라우저가 구글로 직접 보낸다 → 용량 제한 없음
+async function driveStart(body: Json, me: Member, req: Request) {
+  const c = await config();
+  if (!c.mail_relay_url || !c.mail_relay_secret) return json({ ok: false, msg: "드라이브 연결이 아직 준비되지 않았어요." });
+  const name = String(body.name ?? "").replace(/[\\/:*?"<>|]/g, "_").trim().slice(0, 200);
+  const size = Number(body.size ?? 0);
+  if (!name || !(size > 0)) return json({ ok: false, msg: "올릴 파일을 확인해 주세요." });
+  if (size > 10 * 1024 * 1024 * 1024) return json({ ok: false, msg: `'${name}'은(는) 10GB가 넘어요.` });
+  const folderId = /^[A-Za-z0-9_-]{10,80}$/.test(String(body.folderId ?? "")) ? String(body.folderId) : "";
+  const kst = new Date(Date.now() + 9 * 3600_000).toISOString();
+  const campus = me.campus === ALL_CAMPUS ? "이사" : me.campus;
+  const folderPath = ["학원 아카이브 자료함", kst.slice(0, 7), `${kst.slice(5, 7)}${kst.slice(8, 10)} ${kst.slice(11, 13)}${kst.slice(14, 16)} ${campus} ${me.name}`];
+  const origin = req.headers.get("origin") ?? SITE.replace(/\/$/, "");
+  try {
+    const r = await fetch(c.mail_relay_url, { method: "POST", headers: { "content-type": "text/plain;charset=utf-8" }, body: JSON.stringify({ secret: c.mail_relay_secret, action: "upload-start", folderId, folderPath, name, size, type: String(body.type ?? "") || "application/octet-stream", origin }), redirect: "follow", signal: AbortSignal.timeout(30_000) });
+    const text = await r.text();
+    let out: Json = {};
+    try { out = JSON.parse(text); } catch { out = { ok: false, error: `HTTP ${r.status}` }; }
+    if (!out.ok || !out.uploadUrl) { console.error("[drive-start]", text.slice(0, 300)); return json({ ok: false, msg: out.error === "bad-to" || /unknown|bad-to/.test(String(out.error)) ? "드라이브 연결(Apps Script)이 아직 업데이트되지 않았어요. 관리자에게 알려 주세요." : "드라이브에 올릴 준비를 하지 못했어요. 잠시 후 다시 시도해 주세요." }); }
+    return json({ ok: true, uploadUrl: out.uploadUrl, folderId: out.folderId, folderUrl: out.folderUrl });
+  } catch (e) { console.error("[drive-start]", e); return json({ ok: false, msg: "드라이브 연결이 늦어지고 있어요. 잠시 후 다시 시도해 주세요." }); }
+}
+
 // ---------- 라우터 ----------
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
@@ -730,6 +754,7 @@ Deno.serve(async (req) => {
     if (path === "fund/unlock") return await fundUnlock(body, me, ip);
     if (path === "fund/config") return fundOpen ? json({ accountLabel: (await config()).fund_account_label ?? "제작실 공동계좌" }) : json({ error: "기금 잠금이 풀리지 않았어요.", fundLocked: canFund(me) }, 403);
     if (path === "production/complete") return await productionComplete(body, me);
+    if (path === "drive/start") return await driveStart(body, me, req);
 
     if (path === "files/sign-upload") return await signUpload(body, role);
     if (path === "files/sign-read") return await signRead(body.keys);
