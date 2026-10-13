@@ -599,8 +599,8 @@ export const inboxApi = {
     await setDoc("inbox", id, { title, memo: memo.trim().slice(0, 500), files: files.map(({ url: _u, ...f }) => f), uploader: me?.name ?? "", campus, createdAt: now(), status: "new" });
     return id;
   },
-  check: (id: string, reaction: string | null) => { const me = getMe(); return updateDoc("inbox", id, { checkedAt: now(), checkedBy: me?.name ?? "", reaction }); },
-  react: (id: string, reaction: string | null) => updateDoc("inbox", id, { reaction }),
+  /** 확인 도장 + 반응 (반응만 바꿔도 도장 정보를 같이 보내서, 연달아 눌러도 서로 덮어쓰지 않게) */
+  check: (id: string, reaction: string | null, checkedAt?: string | null, checkedBy?: string | null) => { const me = getMe(); return updateDoc("inbox", id, { checkedAt: checkedAt || now(), checkedBy: checkedBy || me?.name || "", reaction }); },
   done: (id: string, note: string) => updateDoc("inbox", id, { status: "done", doneNote: note.slice(0, 200) }),
   remove: (id: string) => deleteDoc("inbox", id),
   downloadUrl(f: InboxFile) {

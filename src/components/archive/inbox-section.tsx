@@ -60,11 +60,17 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
     if (!picked.length) { fileRef.current?.click(); return; }
     setSending({ done: 0, total: picked.length, pct: 0 });
     try {
-      const uploaded: InboxFile[] = [];
-      for (let i = 0; i < picked.length; i++) {
-        uploaded.push(await inboxApi.upload(picked[i], (pct) => setSending({ done: i, total: picked.length, pct })));
-        setSending({ done: i + 1, total: picked.length, pct: 100 });
-      }
+      // 3개씩 동시에 올리기 (순서는 그대로)
+      const uploaded: InboxFile[] = new Array(picked.length);
+      let next = 0, done = 0;
+      const pcts = new Array(picked.length).fill(0);
+      const tick = () => setSending({ done, total: picked.length, pct: Math.round(pcts.reduce((a, b) => a + b, 0) / picked.length) });
+      await Promise.all(Array.from({ length: Math.min(3, picked.length) }, async () => {
+        for (let i = next++; i < picked.length; i = next++) {
+          uploaded[i] = await inboxApi.upload(picked[i], (pct) => { pcts[i] = pct; tick(); });
+          pcts[i] = 100; done++; tick();
+        }
+      }));
       await inboxApi.send(uploaded, memo);
       setPicked([]); setMemo("");
       toast.success(admin ? "📨 자료함에 올렸어요." : "📨 보냈어요! 관리자에게 알림이 갔어요.");
@@ -73,10 +79,14 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
     finally { setSending(null); }
   }
 
-  async function check(item: InboxItem, reaction: string | null) {
-    setItems((cur) => cur?.map((x) => x.id === item.id ? { ...x, checkedAt: x.checkedAt ?? new Date().toISOString(), checkedBy: x.checkedBy ?? me?.name ?? "", reaction } : x) ?? cur);
-    try { if (item.checkedAt) await inboxApi.react(item.id, reaction); else await inboxApi.check(item.id, reaction); }
-    catch { toast.error("저장하지 못했어요."); void load(); }
+  // 같은 묶음에 대한 저장은 순서대로 (빠르게 연달아 눌러도 안전)
+  const queue = useRef(new Map<string, Promise<unknown>>());
+  function check(item: InboxItem, reaction: string | null) {
+    const checkedAt = item.checkedAt ?? new Date().toISOString(), checkedBy = item.checkedBy ?? me?.name ?? "";
+    setItems((cur) => cur?.map((x) => x.id === item.id ? { ...x, checkedAt, checkedBy, reaction } : x) ?? cur);
+    const prev = queue.current.get(item.id) ?? Promise.resolve();
+    const run = prev.then(() => inboxApi.check(item.id, reaction, checkedAt, checkedBy)).catch(() => { toast.error("저장하지 못했어요."); void load(); });
+    queue.current.set(item.id, run);
   }
   async function remove(item: InboxItem) {
     if (!confirmDelete(item)) return;
@@ -84,7 +94,12 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
     catch { toast.error("지우지 못했어요."); }
   }
   async function markDone(item: InboxItem, note: string) {
-    try { await inboxApi.done(item.id, note); setDoneFor(null); toast.success("✅ 정리 완료! 사이트에 있던 파일은 지웠어요."); await load(); }
+    try {
+      await (queue.current.get(item.id) ?? Promise.resolve());
+      await inboxApi.done(item.id, note); setDoneFor(null);
+      setItems((cur) => cur?.map((x) => x.id === item.id ? { ...x, status: "done", doneNote: note, doneAt: new Date().toISOString(), fileNames: x.files.map((f) => f.name), files: [] } : x) ?? cur);
+      toast.success("✅ 정리 완료! 사이트에 있던 파일은 지웠어요."); void load();
+    }
     catch { toast.error("정리 표시를 하지 못했어요."); }
   }
   function downloadAll(item: InboxItem) {
@@ -126,7 +141,7 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
           {showDay && <div className="my-3 flex justify-center"><span className="rounded-full bg-black/10 px-3 py-1 text-[11px] text-foreground/70 dark:bg-white/10">{day}</span></div>}
           <div className={`flex items-end gap-2 ${mine ? "flex-row-reverse" : ""}`}>
             {!mine && <span className="mb-5 grid size-9 shrink-0 place-items-center self-start rounded-2xl text-sm font-bold text-white" style={{ background: campusColor(item.campus) }}>{item.uploader.slice(-2)}</span>}
-            <div className={`flex max-w-[86%] flex-col sm:max-w-[70%] ${mine ? "items-end" : "items-start"}`}>
+            <div className={`flex max-w-[86%] flex-col sm:max-w-[420px] ${mine ? "items-end" : "items-start"}`}>
               {!mine && <span className="mb-1 ml-1 text-xs text-foreground/70">{item.campus} {item.uploader}</span>}
               <div className="flex items-end gap-1.5">
                 {/* 말풍선 옆 상태 (카톡처럼 노란 1 → 확인) */}
@@ -152,8 +167,8 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
               </div>
               {/* 관리자 손잡이 */}
               {admin && !done && <div className={`mt-1.5 flex flex-wrap items-center gap-1 ${mine ? "justify-end" : ""}`}>
-                {!item.checkedAt && <button type="button" onClick={() => void check(item, null)} className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-primary shadow-xs hover:bg-primary hover:text-primary-foreground">👀 확인</button>}
-                {REACTIONS.map((r) => <button key={r} type="button" aria-label={`${r} 반응`} onClick={() => void check(item, item.reaction === r ? null : r)} className={`grid size-7 place-items-center rounded-full text-sm shadow-xs transition hover:scale-125 ${item.reaction === r ? "bg-amber-200 ring-2 ring-amber-400" : "bg-card"}`}>{r}</button>)}
+                {!item.checkedAt && <button type="button" onClick={() => check(item, item.reaction ?? null)} className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-primary shadow-xs hover:bg-primary hover:text-primary-foreground">👀 확인</button>}
+                {REACTIONS.map((r) => <button key={r} type="button" aria-label={`${r} 반응`} onClick={() => check(item, item.reaction === r ? null : r)} className={`grid size-7 place-items-center rounded-full text-sm shadow-xs transition hover:scale-125 ${item.reaction === r ? "bg-amber-200 ring-2 ring-amber-400" : "bg-card"}`}>{r}</button>)}
                 {item.files.length > 0 && <button type="button" onClick={() => downloadAll(item)} className="rounded-full bg-card px-2.5 py-1 text-xs shadow-xs hover:bg-muted"><Download className="mr-0.5 inline size-3.5" />모두 받기</button>}
                 <button type="button" onClick={() => setDoneFor(item)} className="rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-emerald-700"><CheckCheck className="mr-0.5 inline size-3.5" />정리 완료</button>
                 <button type="button" aria-label="지우기" onClick={() => void remove(item)} className="grid size-7 place-items-center rounded-full bg-card text-muted-foreground shadow-xs hover:text-rose-600"><Trash2 className="size-3.5" /></button>
@@ -174,7 +189,7 @@ export function InboxSection({ role }: { role: "staff" | "admin" }) {
         <span className="max-w-32 truncate">{f.name}</span><span className="opacity-50">{sizeText(f.size)}</span>
         {!sending && <button type="button" aria-label="빼기" onClick={() => setPicked((cur) => cur.filter((_, j) => j !== i))}><X className="size-3.5" /></button>}
       </span>)}</div>}
-      {sending && <div className="mb-2"><div className="mb-1 flex justify-between text-xs text-muted-foreground"><span>보내는 중… {sending.done}/{sending.total}</span><span>{sending.pct}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${((sending.done + sending.pct / 100) / sending.total) * 100}%` }} /></div></div>}
+      {sending && <div className="mb-2"><div className="mb-1 flex justify-between text-xs text-muted-foreground"><span>보내는 중… {sending.done}/{sending.total}</span><span>{sending.pct}%</span></div><div className="h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-primary transition-all" style={{ width: `${sending.pct}%` }} /></div></div>}
       <div className="flex items-end gap-2">
         <Button type="button" variant="ghost" size="icon" className="size-11 shrink-0 rounded-full" disabled={!!sending} onClick={() => fileRef.current?.click()} aria-label="파일 첨부"><Paperclip className="size-5" /></Button>
         <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
