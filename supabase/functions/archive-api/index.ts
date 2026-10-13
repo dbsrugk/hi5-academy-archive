@@ -27,8 +27,8 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const now = () => new Date().toISOString();
 
 // 컬렉션 규칙
-const COLLECTIONS = new Set(["events", "marketing", "meetings", "promotions", "productionRequests", "productionSchedules", "productionPriority", "complianceRequirements", "complianceSubmissions", "complianceLogs", "fund", "nationalNews"]);
-const STAFF_CREATE = new Set(["promotions", "productionRequests", "complianceSubmissions", "complianceLogs"]);
+const COLLECTIONS = new Set(["events", "marketing", "meetings", "promotions", "productionRequests", "productionSchedules", "productionPriority", "complianceRequirements", "complianceSubmissions", "complianceLogs", "fund", "nationalNews", "inbox"]);
+const STAFF_CREATE = new Set(["promotions", "productionRequests", "complianceSubmissions", "complianceLogs", "inbox"]);
 const ADMIN_READ = new Set(["complianceLogs"]);
 const READ_TRACKED = new Set(["events", "marketing", "meetings", "promotions", "nationalNews", "productionRequests"]);
 const DRAFT_FIELD: Record<string, string> = { events: "status", marketing: "status", meetings: "status", promotions: "visibility" };
@@ -285,6 +285,10 @@ async function notifyList(me: Member) {
     const { count: members } = await supabase.from("members").select("id", { count: "exact", head: true }).eq("status", "pending");
     badges.requests = requests ?? 0; if (me.is_admin) badges.members = members ?? 0;
   }
+  if (me.is_admin) {
+    const { count: inbox } = await supabase.from("docs").select("id", { count: "exact", head: true }).eq("collection", "inbox").neq("data->>status", "done");
+    badges.inbox = inbox ?? 0;
+  }
   const { count: devices } = await supabase.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("member_id", me.id);
   return json({ items: items ?? [], unread: unread ?? 0, badges, devices: devices ?? 0, vapidKey: (await config()).vapid_public ?? null });
 }
@@ -457,12 +461,12 @@ async function adminDelete(body: Json, me: Member, ip: string) {
 // ---------- 파일 ----------
 const previewTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 async function signUpload(body: Json, role: Role) {
-  const purpose = body.purpose === "source" ? "source" : body.purpose === "certificate" ? "certificate" : "preview";
+  const purpose = body.purpose === "source" ? "source" : body.purpose === "certificate" ? "certificate" : body.purpose === "inbox" ? "inbox" : "preview";
   if (purpose === "source" && role !== "admin") return json({ error: "본사 관리자 권한이 필요합니다." }, 403);
   const name = String(body.name ?? "").slice(0, 255), type = String(body.type ?? ""), size = Number(body.size ?? 0);
   if (!name || !size) return json({ error: "업로드할 파일을 선택해 주세요." }, 400);
   if (purpose === "preview" && !previewTypes.has(type)) return json({ error: "이미지 파일(JPG·PNG·WEBP·GIF)만 올릴 수 있습니다." }, 400);
-  if (size > (purpose === "preview" ? 15 : 50) * 1024 * 1024) return json({ error: "파일 크기가 너무 큽니다." }, 400);
+  if (size > (purpose === "preview" ? 15 : 50) * 1024 * 1024) return json({ error: purpose === "inbox" ? `'${name}'은(는) 50MB가 넘어요. 큰 파일은 구글 드라이브로 보내 주세요.` : "파일 크기가 너무 큽니다." }, 400);
   const ext = (name.includes(".") ? name.split(".").pop()! : "bin").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8) || "bin";
   const key = `${crypto.randomUUID()}.${ext}`;
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(key);
@@ -489,18 +493,18 @@ function hideDraft(collection: string, role: Role, doc: Json) {
   const field = DRAFT_FIELD[collection];
   return role !== "admin" && field && doc[field] !== "published";
 }
-async function dbList(collection: string, role: Role, principal: boolean, fund = false) {
+async function dbList(collection: string, role: Role, principal: boolean, fund = false, meId = "") {
   if (!canRead(collection, role, principal, fund)) return json({ docs: [] });
   const { data, error } = await supabase.from("docs").select("id,data").eq("collection", collection).order("updated_at", { ascending: false }).limit(5000);
   if (error) throw error;
-  return json({ docs: (data ?? []).map((r) => ({ ...(r.data as Json), id: r.id })).filter((d) => !hideDraft(collection, role, d)) });
+  return json({ docs: (data ?? []).map((r) => ({ ...(r.data as Json), id: r.id })).filter((d) => !hideDraft(collection, role, d)).filter((d) => collection !== "inbox" || role === "admin" || d.createdById === meId) });
 }
-async function dbGet(collection: string, id: string, role: Role, principal: boolean, fund = false) {
+async function dbGet(collection: string, id: string, role: Role, principal: boolean, fund = false, meId = "") {
   if (!canRead(collection, role, principal, fund)) return json({ doc: null });
   const { data, error } = await supabase.from("docs").select("id,data").eq("collection", collection).eq("id", id).maybeSingle();
   if (error) throw error;
   const doc = data ? { ...(data.data as Json), id: data.id } : null;
-  return json({ doc: doc && !hideDraft(collection, role, doc) ? doc : null });
+  return json({ doc: doc && !hideDraft(collection, role, doc) && (collection !== "inbox" || role === "admin" || doc.createdById === meId) ? doc : null });
 }
 async function dbWrite(op: string, body: Json, baseRole: Role, fundOpen: boolean, me: Member) {
   const collection = String(body.collection ?? ""), id = String(body.id ?? "");
@@ -511,13 +515,19 @@ async function dbWrite(op: string, body: Json, baseRole: Role, fundOpen: boolean
   const { data: existing, error: readError } = await supabase.from("docs").select("data").eq("collection", collection).eq("id", id).maybeSingle();
   if (readError) throw readError;
   // 요청자 본인은 '승인 대기'일 때만 자기 요청을 고치거나 지울 수 있다
-  const ownPending = collection === "productionRequests" && existing && (existing.data as Json).createdById === me.id && (existing.data as Json).status === "approval_pending";
+  const ownPending = (collection === "productionRequests" && existing && (existing.data as Json).createdById === me.id && (existing.data as Json).status === "approval_pending")
+    || (collection === "inbox" && existing && (existing.data as Json).createdById === me.id); // 자료함: 올린 사람은 자기 폴더를 지울 수 있다
   if (role !== "admin" && collection !== "fund" && !(ownPending && (op === "update" || op === "delete"))) {
     if (op !== "set" || !STAFF_CREATE.has(collection) || existing) return json({ error: "본사 관리자 권한이 필요합니다." }, 403);
   }
   if (op === "delete") {
     const { error } = await supabase.from("docs").delete().eq("collection", collection).eq("id", id);
     if (error) throw error;
+    // 자료함 폴더를 지우면 사이트에 있던 파일도 함께 지운다 (원본은 드라이브에 옮긴 뒤 지우는 흐름)
+    if (collection === "inbox" && existing && body.keepFiles !== true) {
+      const keys = (Array.isArray((existing.data as Json).files) ? (existing.data as Json).files : []).map((f: Json) => String(f.key ?? "")).filter((k: string) => /^[a-f0-9-]+\.[a-z0-9]{1,8}$/.test(k));
+      if (keys.length) { const { error: rmError } = await supabase.storage.from(BUCKET).remove(keys); if (rmError) console.error("[inbox]", rmError); }
+    }
     return json({ ok: true });
   }
   let next: Json = typeof body.data === "object" && body.data ? { ...body.data } : {};
@@ -534,12 +544,35 @@ async function dbWrite(op: string, body: Json, baseRole: Role, fundOpen: boolean
     next.history = Array.isArray(next.history) ? next.history.slice(0, 1).map((h: Json) => ({ ...h, status: "approval_pending" })) : [];
     next.progressImages = existing ? ((existing.data as Json).progressImages ?? []) : [];
   }
-  if (collection === "productionRequests" && !existing) next.createdById = me.id;
+  // 자료함: 확인 도장·반응·정리 표시는 관리자만 (올린 사람은 메모만 고칠 수 있다)
+  if (collection === "inbox" && role !== "admin") {
+    const prev = (existing?.data ?? {}) as Json;
+    for (const k of ["checkedAt", "checkedBy", "reaction", "status", "doneNote", "doneAt", "fileNames"]) { if (prev[k] !== undefined) next[k] = prev[k]; else delete next[k]; }
+    if (existing) next.files = prev.files ?? [];
+  }
+  if (collection === "inbox" && role === "admin" && existing && next.checkedAt && !(existing.data as Json).checkedAt && next.createdById && next.createdById !== me.id) {
+    background(notify([next.createdById], { kind: "inbox", title: `👀 ${me.name}님이 올린 자료를 확인했어요${next.reaction ? ` ${next.reaction}` : ""}`, body: String(next.title ?? ""), link: "#inbox", ref: `inbox-seen-${id}`, mail: false }));
+  }
+  // 자료함 정리 완료: 사이트 파일은 지우고 대화 기록(어디로 옮겼는지)만 남긴다
+  if (collection === "inbox" && existing && next.status === "done" && (existing.data as Json).status !== "done") {
+    const old = Array.isArray((existing.data as Json).files) ? (existing.data as Json).files : [];
+    const keys = old.map((f: Json) => String(f.key ?? "")).filter((k: string) => /^[a-f0-9-]+\.[a-z0-9]{1,8}$/.test(k));
+    if (keys.length) { const { error: rmError } = await supabase.storage.from(BUCKET).remove(keys); if (rmError) console.error("[inbox]", rmError); }
+    next.fileNames = old.map((f: Json) => String(f.name ?? "")).slice(0, 200);
+    next.files = [];
+    next.doneAt = now();
+    if (next.createdById && next.createdById !== me.id) background(notify([next.createdById], { kind: "inbox", title: "📥 올린 자료가 정리됐어요", body: `${String(next.title ?? "")}${next.doneNote ? ` · ${String(next.doneNote).slice(0, 100)}` : ""}`, link: "#inbox", ref: `inbox-done-${id}` }));
+  }
+  if ((collection === "productionRequests" || collection === "inbox") && !existing) next.createdById = me.id;
+  if (collection === "inbox" && existing) next.createdById = (existing.data as Json).createdById ?? null;
   if (collection === "productionRequests" && existing) next.createdById = (existing.data as Json).createdById ?? null;
   if (JSON.stringify(next).length > 400_000) return json({ error: "기록이 너무 큽니다." }, 400);
   const { error } = await supabase.from("docs").upsert({ collection, id, data: next, updated_at: now() });
   if (error) throw error;
-  if (collection !== "productionRequests") background(contentNotify(collection, id, existing?.data as Json | undefined, next, me, role));
+  if (collection === "inbox" && !existing) {
+    const n = Array.isArray(next.files) ? next.files.length : 0;
+    background(adminIds(me.id).then((ids) => notifyGrouped(ids, { kind: "inbox", title: `📥 업로드 요청 · ${String(next.title ?? "").slice(0, 60)}`, body: `파일 ${n}개${next.memo ? ` · ${String(next.memo).slice(0, 80)}` : ""}`, link: "#inbox", ref: `inbox-${me.id}-${slot(10)}` })));
+  } else if (collection !== "productionRequests" && collection !== "inbox") background(contentNotify(collection, id, existing?.data as Json | undefined, next, me, role));
   if (collection === "productionRequests") {
     const prev = existing?.data as Json | undefined;
     if (!prev) {
@@ -701,8 +734,8 @@ Deno.serve(async (req) => {
     if (path === "files/sign-upload") return await signUpload(body, role);
     if (path === "files/sign-read") return await signRead(body.keys);
 
-    if (path === "db/list") return COLLECTIONS.has(body.collection) ? await dbList(body.collection, role, principal, fundOpen) : json({ docs: [] });
-    if (path === "db/get") return COLLECTIONS.has(body.collection) ? await dbGet(body.collection, String(body.id ?? ""), role, principal, fundOpen) : json({ doc: null });
+    if (path === "db/list") return COLLECTIONS.has(body.collection) ? await dbList(body.collection, role, principal, fundOpen, me.id) : json({ docs: [] });
+    if (path === "db/get") return COLLECTIONS.has(body.collection) ? await dbGet(body.collection, String(body.id ?? ""), role, principal, fundOpen, me.id) : json({ doc: null });
     if (path === "db/set" || path === "db/update" || path === "db/delete") return await dbWrite(path.slice(3), body, role, fundOpen, me);
 
     // 읽음 확인 (누가 몇 명 확인했는지)

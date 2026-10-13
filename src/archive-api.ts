@@ -94,7 +94,7 @@ function dbError(error: any) {
 
 // ---------- 알림 ----------
 export type NotificationItem = { id: string; kind: string; title: string; body: string | null; link: string | null; created_at: string; read_at: string | null };
-export type NotificationState = { items: NotificationItem[]; unread: number; badges: { requests?: number; members?: number }; devices: number; vapidKey: string | null };
+export type NotificationState = { items: NotificationItem[]; unread: number; badges: { requests?: number; members?: number; inbox?: number }; devices: number; vapidKey: string | null };
 export const notifyApi = {
   list: () => call("notify/list") as Promise<NotificationState>,
   read: (ids: string[] | "all") => call("notify/read", ids === "all" ? { all: true } : { ids }),
@@ -555,6 +555,58 @@ export const fundApi = {
     if (!put.ok) throw new ApiError(put.status, "영수증을 올리지 못했습니다.");
     fileCache.set(signed.key, { url: URL.createObjectURL(file), at: Date.now() });
     return String(signed.key);
+  },
+};
+
+// ---------- 자료함 (누구나 올리기만 → 관리자가 확인·정리) ----------
+export type InboxFile = { key: string; name: string; size: number; type: string; url?: string | null };
+export type InboxItem = {
+  id: string; title: string; memo: string; files: InboxFile[]; fileNames?: string[]; createdById?: string; uploader: string; campus: string; createdAt: string;
+  checkedAt?: string | null; checkedBy?: string | null; reaction?: string | null; status?: "new" | "done"; doneNote?: string; doneAt?: string;
+};
+export const inboxApi = {
+  async list(): Promise<InboxItem[]> {
+    const rows = await all("inbox");
+    await ensureBlobs(rows.flatMap((r) => (Array.isArray(r.files) ? r.files.map((f: Json) => f.key) : [])));
+    return rows.map((r) => ({
+      id: r.id, title: String(r.title ?? ""), memo: String(r.memo ?? ""), uploader: String(r.uploader ?? ""), campus: String(r.campus ?? ""), createdAt: String(r.createdAt ?? ""), createdById: r.createdById,
+      files: (Array.isArray(r.files) ? r.files : []).map((f: Json) => ({ key: String(f.key), name: String(f.name ?? f.key), size: Number(f.size ?? 0) || 0, type: String(f.type ?? ""), url: fileUrl(String(f.key)) })),
+      fileNames: Array.isArray(r.fileNames) ? r.fileNames : undefined, checkedAt: r.checkedAt ?? null, checkedBy: r.checkedBy ?? null, reaction: r.reaction ?? null, status: (r.status === "done" ? "done" : "new") as "done" | "new", doneNote: r.doneNote ?? "", doneAt: r.doneAt ?? "",
+    })).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+  /** 파일 하나 올리기 (50MB까지, 종류 상관없음) */
+  async upload(file: File, onProgress?: (pct: number) => void): Promise<InboxFile> {
+    const signed = await call("files/sign-upload", { name: file.name, type: file.type || "application/octet-stream", size: file.size, purpose: "inbox" });
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", signed.signedUrl);
+      xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
+      xhr.setRequestHeader("x-upsert", "false");
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress?.(Math.round((e.loaded / e.total) * 100)); };
+      xhr.onload = () => (xhr.status < 300 ? resolve() : reject(new Error(`'${file.name}'을(를) 올리지 못했어요.`)));
+      xhr.onerror = () => reject(new Error(`'${file.name}'을(를) 올리지 못했어요. 연결을 확인해 주세요.`));
+      xhr.send(file);
+    });
+    if (file.type.startsWith("image/")) fileCache.set(signed.key, { url: URL.createObjectURL(file), at: Date.now() });
+    return { key: String(signed.key), name: file.name, size: file.size, type: file.type };
+  },
+  async send(files: InboxFile[], memo: string) {
+    const me = getMe();
+    const d = new Date(Date.now() + 9 * 3600_000);
+    const campus = me ? (me.campus === "전체" ? "이사" : me.campus) : "";
+    const title = `${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")} ${campus} ${me?.name ?? ""}`.trim();
+    const id = "ib-" + crypto.randomUUID().replaceAll("-", "").slice(0, 20);
+    await setDoc("inbox", id, { title, memo: memo.trim().slice(0, 500), files: files.map(({ url: _u, ...f }) => f), uploader: me?.name ?? "", campus, createdAt: now(), status: "new" });
+    return id;
+  },
+  check: (id: string, reaction: string | null) => { const me = getMe(); return updateDoc("inbox", id, { checkedAt: now(), checkedBy: me?.name ?? "", reaction }); },
+  react: (id: string, reaction: string | null) => updateDoc("inbox", id, { reaction }),
+  done: (id: string, note: string) => updateDoc("inbox", id, { status: "done", doneNote: note.slice(0, 200) }),
+  remove: (id: string) => deleteDoc("inbox", id),
+  downloadUrl(f: InboxFile) {
+    const url = fileUrl(f.key);
+    if (!url || !url.startsWith("http")) return url;
+    return `${url}${url.includes("?") ? "&" : "?"}download=${encodeURIComponent(f.name)}`;
   },
 };
 

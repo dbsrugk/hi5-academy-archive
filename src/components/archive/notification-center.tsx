@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileCheck2, LayoutGrid, Megaphone, Newspaper, NotebookTabs, PanelsTopLeft, WalletCards, Mail, Bell, BellOff, BellRing, CheckCheck, ClipboardList, LoaderCircle, Send, Share, Smartphone, UserPlus, AlarmClock } from "lucide-react";
+import { FileCheck2, LayoutGrid, Megaphone, Newspaper, NotebookTabs, PanelsTopLeft, WalletCards, Mail, Bell, BellOff, BellRing, CheckCheck, ClipboardList, LoaderCircle, Send, Share, Smartphone, UserPlus, AlarmClock, Inbox } from "lucide-react";
 import { toast } from "sonner";
 
 import { notifyApi, type NotificationItem, type NotificationState } from "@/archive-api";
@@ -30,9 +30,10 @@ function ago(iso: string) {
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)}일 전`;
   const d = new Date(iso); return `${d.getMonth() + 1}/${d.getDate()}`;
 }
-const kindIcon: Record<string, typeof Bell> = { request: ClipboardList, member: UserPlus, deadline: AlarmClock, test: BellRing, national: Newspaper, meetings: NotebookTabs, events: LayoutGrid, promotions: Megaphone, marketing: PanelsTopLeft, compliance: FileCheck2, fund: WalletCards };
+const kindIcon: Record<string, typeof Bell> = { request: ClipboardList, member: UserPlus, deadline: AlarmClock, test: BellRing, national: Newspaper, meetings: NotebookTabs, events: LayoutGrid, promotions: Megaphone, marketing: PanelsTopLeft, compliance: FileCheck2, fund: WalletCards, inbox: Inbox };
 // 알림함 카테고리 (알림 kind 묶음)
 const CATEGORIES: { key: string; label: string; kinds: string[] }[] = [
+  { key: "inbox", label: "자료함", kinds: ["inbox"] },
   { key: "request", label: "제작 요청", kinds: ["request", "deadline"] },
   { key: "national", label: "전국 소식", kinds: ["national"] },
   { key: "meetings", label: "회의록", kinds: ["meetings"] },
