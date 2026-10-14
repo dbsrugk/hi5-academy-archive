@@ -42,6 +42,7 @@
 - Apps Script 중계: 코드 원본 `tools/mail-relay.gs`. 주소는 DB `app_config.mail_relay_url`, 비밀값은 DB에만. 처리: 메일 발송 / `drive`(제작 완료 이미지 저장) / `upload-start`. 현재 배포 버전 2.
   - 수정하려면 사용자 크롬에서 script.google.com 편집 → **배포 관리 → 새 버전**으로 배포해야 반영.
 - inbox 문서 필드: title, memo, files[{driveId,name,size,type,url}], folderUrl, uploader, campus, createdAt, status(new|done), checkedAt/checkedBy/reaction, doneNote/doneAt/fileNames, proposedAt.
+- 공유: 「학원 아카이브 자료함」 최상위 폴더 = **링크가 있는 사람 보기**(2026-10-14 설정, 하위 폴더·파일 상속). 업로드는 사이트가 소유자 계정으로 대신 하므로 보기 권한과 무관.
 - 드라이브는 100MB 넘는 zip을 미리보기 못 함 → 압축 말고 이미지 그대로 올리도록 안내.
 
 ## 5. 예약 작업
@@ -53,6 +54,7 @@
 - 테스트 계정을 만들었으면 끝나고 정지/삭제. 테스트 데이터·드라이브 테스트 폴더도 정리.
 
 ## 7. 최근 변경 기록 (최신이 위)
+- 2026-10-14 자료함 드라이브 폴더 '링크가 있는 사람 보기'로 공유(직원 액세스 요청 없이 열람).
 - 2026-10-13 마케팅 제작물에 「김해·명지 학원 홍보 포스터 (DRAW YOUR DREAM)」 4장 등록, 자료함 묶음 정리 완료.
 - 2026-10-13 자료함 추가(대화창 UI, 확인 👀 도장·반응·정리 완료, 드라이브 바로 올리기), Apps Script v2.
 - 2026-10-13 제작실 주간 운영표(요일별 계획 + 날짜 예외) — 달력 태그·주간 띠·요청서 안내에 표시.
