@@ -761,12 +761,13 @@ async function route(method: string, path: string, params: URLSearchParams, init
 
     // 제작실 주간 운영표 (요일별 고정 + 날짜별 예외) — 보기는 모두, 수정은 관리자·제작실장
     if (head === "production-weekly") {
-      if (method === "GET") { const d = await getDoc("productionPriority", "weekly-plan"); return json({ plan: d ? { days: d.days ?? {}, exceptions: d.exceptions ?? {}, updatedAt: d.updatedAt ?? "", updatedBy: d.updatedBy ?? "" } : { days: {}, exceptions: {} } }); }
+      if (method === "GET") { const d = await getDoc("productionPriority", "weekly-plan"); return json({ plan: d ? { days: d.days ?? {}, exceptions: d.exceptions ?? {}, busy: Array.isArray(d.busy) ? d.busy : [], updatedAt: d.updatedAt ?? "", updatedBy: d.updatedBy ?? "" } : { days: {}, exceptions: {} } }); }
       if (prodRole !== "admin") return forbidden();
       const b = await readBody();
       const days = Object.fromEntries(["0", "1", "2", "3", "4", "5", "6"].map((k) => [k, str(b.days?.[k], 40)]).filter(([, v]) => v));
       const exceptions = Object.fromEntries(Object.entries(b.exceptions ?? {}).filter(([k]) => /^\d{4}-\d{2}-\d{2}$/.test(k)).slice(0, 200).map(([k, v]) => [k, str(v, 40)]).filter(([, v]) => v));
-      const plan = { days, exceptions, updatedAt: now(), updatedBy: whoAmI() };
+      const busy = (Array.isArray(b.busy) ? b.busy : []).map(String).filter((k: string) => exceptions[k] !== undefined).slice(0, 200);
+      const plan = { days, exceptions, busy, updatedAt: now(), updatedBy: whoAmI() };
       await setDoc("productionPriority", "weekly-plan", plan);
       return json({ plan });
     }
