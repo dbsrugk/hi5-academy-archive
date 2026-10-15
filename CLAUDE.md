@@ -17,7 +17,7 @@
 - 서버: Supabase 프로젝트 `xflelzgpwgavtwixiolg`(무료 플랜), edge function **`archive-api` (현재 v16, verify_jwt=false)**.
   - 배포: `mcp__Supabase__deploy_edge_function`에 `supabase/functions/archive-api/index.ts` **전체 내용**을 넣어 배포. 저장소 파일 = 배포본이 되도록 유지.
 - DB: `docs(collection, id, data jsonb)`. 컬렉션: events, marketing, meetings, promotions, productionRequests, productionSchedules, productionPriority, compliance*, nationalNews, **inbox** 등.
-- 정적 이미지: `public/marketing/*.webp`, `public/events/...` → 로그인 안 하면 `middleware.js`가 막음. 갤러리 이미지는 `./marketing/파일.webp` 형식으로 data에 넣음.
+- 정적 이미지: `public/marketing/*.webp`(미리보기) + `public/marketing/orig/…`(다운로드용 원본, 갤러리 항목의 `original`), `public/events/...` → 로그인 안 하면 `middleware.js`가 막음. 갤러리 이미지는 `./marketing/파일.webp` 형식으로 data에 넣음.
 
 ## 2. 권한 (서버 기준)
 - `TITLES` = 원장·전임·행정·이사·**제작실장** (DB 제약 `members_title_check`도 제작실장 허용).
@@ -54,6 +54,7 @@
 - 테스트 계정을 만들었으면 끝나고 정지/삭제. 테스트 데이터·드라이브 테스트 폴더도 정리.
 
 ## 7. 최근 변경 기록 (최신이 위)
+- 2026-10-16 마케팅 제작물 상세에 **캠퍼스별 한 번에 받기**(`src/components/archive/campus-download.tsx`, fflate로 브라우저에서 zip). 사진에 `original`(원본 경로)·`campus`가 있으면 원본으로, 없으면 미리보기로. 캠퍼스는 campus → 캡션/설명/파일명 속 캠퍼스명으로 판단, 2곳 이상일 때만 캠퍼스 버튼. 원본은 `public/marketing/orig/<slug>/NN.png`(middleware로 보호). 성신·동덕·경희(54장)·중부대(12장)를 3캠퍼스 전체+원본으로 교체, 한양·중앙 합격에 원본 연결.
 - 2026-10-15 마케팅 제작물에 「2027 수시 중부대 출제문제 (만화애니메이션)」 4장 등록, 자료함 정리 완료.
 - 2026-10-15 마케팅 제작물에 「2027 수시 성신·동덕·경희 출제문제」(zip 54장 중 김해판 9문제×2종 18장) · 「2027 한양대·중앙대 1차 합격 (김해) 시안」 2장 등록, 자료함 4묶음 정리 완료(중복 zip 1건 포함).
 - 2026-10-15 마케팅 제작물에 「센텀 배너 2종 (하이파이브 디자인 · 애니하이 애니)」 등록(zip 안 JPG), 자료함 묶음 정리 완료.
