@@ -8,6 +8,7 @@ type Json = Record<string, any>;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 const FN = `${SUPABASE_URL}/functions/v1/archive-api/api`;
+const FN_NOTES = `${SUPABASE_URL}/functions/v1/archive-notes/api`; // 노트 제작 전용 서버 함수
 
 const TOKEN_KEY = "hi5-archive-token";
 const COOKIE = "ha_s";
@@ -64,10 +65,10 @@ function fundTokenNow() {
 }
 
 // ---------- 서버 호출 ----------
-async function call(path: string, body: Json = {}) {
+async function call(path: string, body: Json = {}, base: string = FN) {
   const token = storage.get(TOKEN_KEY, true);
   const ft = path.startsWith("fund/") || body?.collection === "fund" ? fundTokenNow() : null;
-  const response = await fetchNative(`${FN}/${path}`, {
+  const response = await fetchNative(`${base}/${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -808,6 +809,17 @@ async function route(method: string, path: string, params: URLSearchParams, init
 }
 
 const fetchNative = window.fetch.bind(window);
+// ---------- 노트 제작 (iframe 편집기가 부모 화면을 통해 부르는 저장소) ----------
+const NOTE_COLLECTIONS = new Set(["noteBooks", "noteComments", "noteImages"]);
+function noteCollection(collection: string) { if (!NOTE_COLLECTIONS.has(collection)) throw new ApiError(400, "잘못된 요청입니다."); return collection; }
+export const notesApi = {
+  async list(collection: string, prefix = ""): Promise<Json[]> { return (await call("list", { collection: noteCollection(collection), prefix }, FN_NOTES)).docs ?? []; },
+  async get(collection: string, id: string): Promise<Json | null> { return (await call("get", { collection: noteCollection(collection), id }, FN_NOTES)).doc ?? null; },
+  async set(collection: string, id: string, data: Json) { await call("set", { collection: noteCollection(collection), id, data }, FN_NOTES); },
+  async update(collection: string, id: string, data: Json) { await call("update", { collection: noteCollection(collection), id, data }, FN_NOTES); },
+  async remove(collection: string, id: string) { await call("delete", { collection: noteCollection(collection), id }, FN_NOTES); },
+};
+
 export function installArchiveApi() {
   window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
     const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;

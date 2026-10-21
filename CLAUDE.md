@@ -16,6 +16,7 @@
 - 화면: Vite + React 19 + Tailwind 4 + shadcn. `src/archive-api.ts`가 `/api/*` fetch를 가로채 edge function `call(path, body)`로 보냄.
 - 서버: Supabase 프로젝트 `xflelzgpwgavtwixiolg`(무료 플랜), edge function **`archive-api` (현재 v16, verify_jwt=false)**.
   - 배포: `mcp__Supabase__deploy_edge_function`에 `supabase/functions/archive-api/index.ts` **전체 내용**을 넣어 배포. 저장소 파일 = 배포본이 되도록 유지.
+- 서버 함수 **`archive-notes`**(v1, verify_jwt=false): 「노트 제작」 전용. archive-api와 같은 토큰(`x-archive-token`)·회원 확인을 쓰고 `docs`의 `noteBooks`·`noteComments`·`noteImages`만 다룬다. archive-api를 건드리지 않으려고 따로 둠(6만 자 통째 재배포 위험 회피). 배포 방법은 위와 같고 파일은 `supabase/functions/archive-notes/index.ts`.
 - DB: `docs(collection, id, data jsonb)`. 컬렉션: events, marketing, meetings, promotions, productionRequests, productionSchedules, productionPriority, compliance*, nationalNews, **inbox** 등.
 - 정적 이미지: `public/marketing/*.webp`(미리보기) + `public/marketing/orig/…`(다운로드용 원본, 갤러리 항목의 `original`), `public/events/...` → 로그인 안 하면 `middleware.js`가 막음. 갤러리 이미지는 `./marketing/파일.webp` 형식으로 data에 넣음.
 
@@ -32,7 +33,8 @@
 | 홍보(부산/김포/전체 탭, 캠퍼스 8개) | `promotions-section.tsx` |
 | 제작실 기금(PIN 잠금) | `fund-section.tsx` |
 | **자료함**(카톡형 대화창 업로드함) | `inbox-section.tsx` |
-| 알림 센터(kind: inbox 등) | `notification-center.tsx` |
+| 알림 센터(kind: inbox·notes 등) | `notification-center.tsx` |
+| **노트 제작**(노트 목록 → 편집기 iframe, 코멘트·구성 공유) | `notes-section.tsx`(목록·iframe·서버 중계) + `public/notes/editor.html`(편집기 본체) + `archive-api.ts`의 `notesApi` + 서버 `archive-notes` |
 | 메뉴·배지·섹션 배치 | `src/app/page.tsx` |
 | 패스키(인앱 브라우저는 제외·외부 브라우저 안내) | `src/archive-api.ts`, `login-gate.tsx` |
 
@@ -53,8 +55,19 @@
 - 타입 검사: 기존 오류(next/image, promotions 데모 타입)는 원래 있던 것.
 - 테스트 계정을 만들었으면 끝나고 정지/삭제. 테스트 데이터·드라이브 테스트 폴더도 정리.
 
+## 6-1. 노트 제작 (2026-10-21 추가)
+- 메뉴 「노트 제작」(`#notes`) → 노트 목록 → 노트를 열면 `public/notes/editor.html?book=<id>`가 iframe으로 열린다. 편집기는 한 파일짜리 순수 HTML/JS이고, 저장·로그인 확인은 **부모 화면이 대신**한다: iframe이 `postMessage`로 `{t:"note-rpc", op, args}`를 보내면 `notes-section.tsx`가 `notesApi`로 서버(`archive-notes`)에 전달하고 `{t:"note-rpc-res"}`로 돌려준다. 편집기 안에서는 `window.claude.use("db"|"user")` 모양의 어댑터(파일 앞쪽 `<script>`)가 이를 감싼다(원래 Claude 아티팩트 시안 코드를 그대로 쓰기 위해). 다른 사람의 코멘트·공유는 6초마다 다시 읽어 반영(실시간 아님).
+- 저장 위치(docs): `noteBooks`(`<노트>:main`=공유 구성, `<노트>:h:<id>`=이전 공유본 최근 20개) · `noteComments`(`<노트>:n:`=포스트잇·`:r:`=답글·`:s:`=스티커) · `noteImages`(`<노트>:<id>`=직원이 올려 공유한 이미지, 한 번 올리면 바뀌지 않음, 256KiB 이하 JPEG).
+- 권한(서버): 로그인한 승인 회원 전원이 읽기·작성·구성 공유 가능. 남의 코멘트는 '반영 완료' 표시만 바꿀 수 있고 지우기는 본인·관리자·제작실장만. 공유 구성(`:main`)·공유 이미지 삭제는 관리자·제작실장만. 작성자는 서버가 `createdById/Name/Campus`로 기록(화면 값은 믿지 않음).
+- 알림(kind `notes`): 새 코멘트·구성 공유 → 관리자+제작실장, 내 코멘트에 답글·반영 완료 → 작성자. 알림 센터에 「노트 제작」 분류.
+- 이미지: `public/notes/<노트>/pNN.jpg`(로그인해야 보임 — `middleware.js` matcher에 `/notes/:path*`). **저장소가 공개라서 올리는 이미지는 광고용 시안뿐**이어야 한다.
+- 새 노트 추가: ① `notes-section.tsx`의 `BOOKS`에 항목 ② `public/notes/editor.html`의 `BOOKS`에 같은 id(제목·이미지 목록·기본 구성 `spring`) ③ 이미지를 `public/notes/<id>/`에. 이미지는 가로 1100px 안팎 JPEG로 줄여서(1장 200~350KB).
+- 페이지 비율은 편집기 ⚙설정의 「페이지 크기」(A4 .7048 / 봄노트 .7575 / 3:4)이고 구성에 함께 저장된다.
+- 첫 노트: `spring-mid` = 2026 봄노트 센텀 중고등(표지 2·속지 18·백지 18쪽, 단면). 순서는 원본 폴더의 '업로드용' 펼침면 기준.
+- 뒤로가기: 사이트 안에서는 편집기가 기록을 따로 쌓지 않고(`EMBED`), `useBackClose`로 '노트 목록'으로만 돌아간다.
+
 ## 7. 최근 변경 기록 (최신이 위)
-- 2026-10-16 마케팅 제작물 상세에 **캠퍼스별 한 번에 받기**(`src/components/archive/campus-download.tsx`, fflate로 브라우저에서 zip). 사진에 `original`(원본 경로)·`campus`가 있으면 원본으로, 없으면 미리보기로. 캠퍼스는 campus → 캡션/설명/파일명 속 캠퍼스명으로 판단, 2곳 이상일 때만 캠퍼스 버튼. 원본은 `public/marketing/orig/<slug>/NN.png`(middleware로 보호). 성신·동덕·경희(54장)·중부대(12장)를 3캠퍼스 전체+원본으로 교체, 한양·중앙 합격에 원본 연결.
+- 2026-10-21 **노트 제작** 메뉴 추가(위 6-1). 서버 함수 `archive-notes` 신규 배포(v1, archive-api는 그대로), 화면 `notes-section.tsx`·`public/notes/editor.html`, 알림 kind `notes`, 미들웨어에 `/notes/` 보호. 봄노트 중고등 20장 등록.- 2026-10-16 마케팅 제작물 상세에 **캠퍼스별 한 번에 받기**(`src/components/archive/campus-download.tsx`, fflate로 브라우저에서 zip). 사진에 `original`(원본 경로)·`campus`가 있으면 원본으로, 없으면 미리보기로. 캠퍼스는 campus → 캡션/설명/파일명 속 캠퍼스명으로 판단, 2곳 이상일 때만 캠퍼스 버튼. 원본은 `public/marketing/orig/<slug>/NN.png`(middleware로 보호). 성신·동덕·경희(54장)·중부대(12장)를 3캠퍼스 전체+원본으로 교체, 한양·중앙 합격에 원본 연결.
 - 2026-10-15 마케팅 제작물에 「2027 수시 중부대 출제문제 (만화애니메이션)」 4장 등록, 자료함 정리 완료.
 - 2026-10-15 마케팅 제작물에 「2027 수시 성신·동덕·경희 출제문제」(zip 54장 중 김해판 9문제×2종 18장) · 「2027 한양대·중앙대 1차 합격 (김해) 시안」 2장 등록, 자료함 4묶음 정리 완료(중복 zip 1건 포함).
 - 2026-10-15 마케팅 제작물에 「센텀 배너 2종 (하이파이브 디자인 · 애니하이 애니)」 등록(zip 안 JPG), 자료함 묶음 정리 완료.

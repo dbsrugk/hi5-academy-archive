@@ -1,7 +1,7 @@
 // 로그인한 교직원만 샘플 사진·양식 파일에 접근할 수 있게 막는 관문 (Vercel Routing Middleware)
 // 로그인 시 화면이 심는 ha_s 쿠키(서버 함수가 서명한 토큰)를 확인한다.
 export const config = {
-  matcher: ["/marketing/:path*", "/templates/:path*", "/((?!hi5-logo)[^/]+\\.webp)"],
+  matcher: ["/marketing/:path*", "/templates/:path*", "/notes/:path*", "/((?!hi5-logo)[^/]+\\.webp)"],
 };
 
 const enc = new TextEncoder();

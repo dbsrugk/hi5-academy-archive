@@ -46,6 +46,7 @@ import {
   ArrowLeft,
   Settings,
   Inbox,
+  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -91,6 +92,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { FundSection } from "@/components/archive/fund-section";
 import { NationalNewsSection } from "@/components/archive/national-news-section";
 import { InboxSection } from "@/components/archive/inbox-section";
+import { NotesSection } from "@/components/archive/notes-section";
 import { CampusDownload } from "@/components/archive/campus-download";
 import { refsOf, stashRequestPrefill, type PickedRef } from "@/components/archive/marketing-picker";
 import { markRead, ReadBadge } from "@/components/archive/read-badge";
@@ -105,9 +107,9 @@ type Role = "staff" | "admin";
 const IDLE_KEY = "hi5-last-active";
 const IDLE_LIMIT = 30 * 60_000;
 type ArchiveSection = "events" | "marketing" | "meetings";
-type Section = ArchiveSection | "promotions" | "requests" | "fund" | "compliance" | "members" | "national" | "inbox";
-const SECTION_LABEL: Record<Section, string> = { events: "이벤트", promotions: "홍보", requests: "제작 요청", marketing: "마케팅 제작물", meetings: "회의록", compliance: "연간 이수 관리", fund: "제작실 기금", members: "회원 관리", national: "전국 Hi5 소식", inbox: "자료함" };
-const SECTION_HASH: Record<Section, string> = { events: "events", promotions: "promotions", requests: "requests", marketing: "marketing", meetings: "meetings", compliance: "compliance", fund: "fund", members: "admin", national: "national", inbox: "inbox" };
+type Section = ArchiveSection | "promotions" | "requests" | "fund" | "compliance" | "members" | "national" | "inbox" | "notes";
+const SECTION_LABEL: Record<Section, string> = { events: "이벤트", promotions: "홍보", requests: "제작 요청", marketing: "마케팅 제작물", meetings: "회의록", compliance: "연간 이수 관리", fund: "제작실 기금", members: "회원 관리", national: "전국 Hi5 소식", inbox: "자료함", notes: "노트 제작" };
+const SECTION_HASH: Record<Section, string> = { events: "events", promotions: "promotions", requests: "requests", marketing: "marketing", meetings: "meetings", compliance: "compliance", fund: "fund", members: "admin", national: "national", inbox: "inbox", notes: "notes" };
 function hashToSection(hash: string): Section | null {
   const key = hash.replace(/^#/, "").split(/[/?]/)[0];
   return (Object.entries(SECTION_HASH).find(([, value]) => value === key)?.[0] as Section | undefined) ?? null;
@@ -1250,9 +1252,9 @@ export default function Home() {
   }, [role, selectedEvent, selectedAsset, selectedMeeting]);
 
   const relatedTitles = useMemo(() => new Map(events.map((event) => [event.id, event.title])), [events]);
-  const sectionLabel = section === "inbox" ? "자료함" : section === "members" ? "회원 관리" : section === "events" ? "이벤트" : section === "promotions" ? "홍보" : section === "requests" ? "제작 요청" : section === "marketing" ? "마케팅 제작물" : section === "meetings" ? "회의록" : section === "compliance" ? "연간 이수 관리" : section === "national" ? "전국 Hi5 소식" : "제작실 기금";
-  const sectionHeading = section === "inbox" ? "자료함" : section === "members" ? "회원 관리" : section === "events" ? "지점별 이벤트 기록" : section === "promotions" ? "홍보 활동 기록과 통계" : section === "requests" ? "제작 요청" : section === "marketing" ? "마케팅 디자인 아카이브" : section === "meetings" ? "회의록 아카이브" : section === "compliance" ? "연간 이수 관리" : section === "national" ? "전국 Hi5 소식" : "제작실 기금";
-  const sectionDescription = section === "inbox" ? "사진·시안·양식 무엇이든 파일만 보내 주세요. 관리자가 확인하고 알맞은 곳으로 정리해요." : section === "members" ? "가입 신청 승인, 직책·관리자 지정, 접속·열람 기록을 관리하세요." : section === "events" ? "대상, 날짜, 예산으로 필요한 행사 사례를 빠르게 찾아보세요." : section === "promotions" ? "부산(센텀·김해·명지)과 김포 캠퍼스의 홍보 기록과 실적을 지역별로 비교하세요." : section === "requests" ? "캠퍼스 요청부터 승인, 제작 진행, 완료까지 한곳에서 관리하세요." : section === "marketing" ? "완성된 제작물과 원본 파일을 찾아 다음 캠페인에 재활용하세요." : section === "meetings" ? "파트별 회의 안건과 합의사항, 후속 업무를 한곳에서 확인하세요." : section === "compliance" ? "캠퍼스별 필수 이수 현황과 이수증 등록 여부를 관리하세요." : section === "national" ? "전국 Hi5·애니Hi 밴드의 공지·연합시험·양식을 모아 보고 바로 내려받으세요." : "원장·이사·제작실장만 열람할 수 있는 제작실 공동기금 내역입니다. 엑셀 양식으로 한 번에 올리고, 눌러서 고칠 수 있어요.";
+  const sectionLabel = section === "notes" ? "노트 제작" : section === "inbox" ? "자료함" : section === "members" ? "회원 관리" : section === "events" ? "이벤트" : section === "promotions" ? "홍보" : section === "requests" ? "제작 요청" : section === "marketing" ? "마케팅 제작물" : section === "meetings" ? "회의록" : section === "compliance" ? "연간 이수 관리" : section === "national" ? "전국 Hi5 소식" : "제작실 기금";
+  const sectionHeading = section === "notes" ? "노트 제작" : section === "inbox" ? "자료함" : section === "members" ? "회원 관리" : section === "events" ? "지점별 이벤트 기록" : section === "promotions" ? "홍보 활동 기록과 통계" : section === "requests" ? "제작 요청" : section === "marketing" ? "마케팅 디자인 아카이브" : section === "meetings" ? "회의록 아카이브" : section === "compliance" ? "연간 이수 관리" : section === "national" ? "전국 Hi5 소식" : "제작실 기금";
+  const sectionDescription = section === "notes" ? "노트 시안을 페이지별로 구성하고, 포스트잇·스티커로 의견을 남겨요. 제작실에 알림이 가요." : section === "inbox" ? "사진·시안·양식 무엇이든 파일만 보내 주세요. 관리자가 확인하고 알맞은 곳으로 정리해요." : section === "members" ? "가입 신청 승인, 직책·관리자 지정, 접속·열람 기록을 관리하세요." : section === "events" ? "대상, 날짜, 예산으로 필요한 행사 사례를 빠르게 찾아보세요." : section === "promotions" ? "부산(센텀·김해·명지)과 김포 캠퍼스의 홍보 기록과 실적을 지역별로 비교하세요." : section === "requests" ? "캠퍼스 요청부터 승인, 제작 진행, 완료까지 한곳에서 관리하세요." : section === "marketing" ? "완성된 제작물과 원본 파일을 찾아 다음 캠페인에 재활용하세요." : section === "meetings" ? "파트별 회의 안건과 합의사항, 후속 업무를 한곳에서 확인하세요." : section === "compliance" ? "캠퍼스별 필수 이수 현황과 이수증 등록 여부를 관리하세요." : section === "national" ? "전국 Hi5·애니Hi 밴드의 공지·연합시험·양식을 모아 보고 바로 내려받으세요." : "원장·이사·제작실장만 열람할 수 있는 제작실 공동기금 내역입니다. 엑셀 양식으로 한 번에 올리고, 눌러서 고칠 수 있어요.";
   const resultCount = section === "events" ? events.length : section === "marketing" ? assets.length : section === "meetings" ? meetings.length : null;
 
   function changeSection(next: Section) {
@@ -1342,6 +1344,13 @@ export default function Home() {
                     <PanelsTopLeft aria-hidden="true" /><span>마케팅 제작물</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                {!demoMode && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton isActive={section === "notes"} tooltip="노트 제작" onClick={() => changeSection("notes")}>
+                    <BookOpen aria-hidden="true" /><span>노트 제작</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                )}
                 <SidebarMenuItem>
                   <SidebarMenuButton isActive={section === "meetings"} tooltip="회의록" onClick={() => changeSection("meetings")}>
                     <NotebookTabs aria-hidden="true" /><span>회의록</span>
@@ -1446,7 +1455,7 @@ export default function Home() {
             />
           )}
 
-          {section === "promotions" ? <PromotionsSection role={role} demoMode={demoMode} /> : section === "requests" ? <ProductionRequestsSection role={role} demoMode={demoMode} onOpenMarketing={(assetId) => { if (assetId) { try { sessionStorage.setItem("archive-open", assetId); } catch { /* 무시 */ } } changeSection("marketing"); if (assetId) window.dispatchEvent(new CustomEvent("archive-open", { detail: assetId })); }} /> : section === "compliance" ? <ComplianceSection role={role} demoMode={demoMode} /> : section === "fund" ? <FundSection /> : section === "national" ? <NationalNewsSection role={role} /> : section === "inbox" ? <InboxSection role={role} /> : section === "members" ? <MembersSection /> : section === "events" ? (
+          {section === "promotions" ? <PromotionsSection role={role} demoMode={demoMode} /> : section === "requests" ? <ProductionRequestsSection role={role} demoMode={demoMode} onOpenMarketing={(assetId) => { if (assetId) { try { sessionStorage.setItem("archive-open", assetId); } catch { /* 무시 */ } } changeSection("marketing"); if (assetId) window.dispatchEvent(new CustomEvent("archive-open", { detail: assetId })); }} /> : section === "compliance" ? <ComplianceSection role={role} demoMode={demoMode} /> : section === "fund" ? <FundSection /> : section === "national" ? <NationalNewsSection role={role} /> : section === "inbox" ? <InboxSection role={role} /> : section === "notes" ? <NotesSection role={role} demoMode={demoMode} /> : section === "members" ? <MembersSection /> : section === "events" ? (
             events.length ? <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{events.map((event) => <EventCard key={event.id} event={event} role={role} onOpen={setSelectedEvent} onStatus={updateStatus} onDelete={deleteRecord} />)}</div> : <EmptyState onReset={resetFilters} />
           ) : section === "marketing" ? assets.length ? (
             <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{assets.map((asset) => <MarketingCard key={asset.id} asset={asset} role={role} onOpen={setSelectedAsset} onStatus={updateStatus} onDelete={deleteRecord} />)}</div>
