@@ -17,7 +17,23 @@ const BOOKS = [
 ];
 const OPEN_KEY = "hi5-notes-open";
 
-type Rpc = { t: "note-rpc"; id: number; op: "list" | "get" | "set" | "update" | "delete"; args: { collection: string; id?: string; prefix?: string; data?: Record<string, unknown> } };
+type Rpc = { t: "note-rpc"; id: number; op: "list" | "get" | "set" | "update" | "delete" | "marketing"; args: { collection: string; id?: string; prefix?: string; data?: Record<string, unknown> } };
+
+type MkAsset = { id: string; title: string; branch: string; createdDate: string; assetType: string; images: { src: string; caption: string }[] };
+// 마케팅 제작물(사진이 있는 것만)을 편집기가 쓰기 좋은 모양으로
+async function loadMarketing(): Promise<MkAsset[]> {
+  const res = await fetch("/api/marketing?limit=all", { cache: "no-store" });
+  const data = (await res.json().catch(() => ({}))) as { assets?: Record<string, any>[]; error?: string };
+  if (!res.ok) throw new Error(data.error ?? "마케팅 제작물을 불러오지 못했어요.");
+  return (data.assets ?? []).map((a) => {
+    const gallery = Array.isArray(a.galleryImages) ? a.galleryImages : [];
+    const list = gallery.length ? gallery : a.previewUrl ? [{ src: a.previewUrl, caption: "미리보기" }] : [];
+    return {
+      id: String(a.id), title: String(a.title ?? ""), branch: String(a.branch ?? ""), createdDate: String(a.createdDate ?? ""), assetType: String(a.assetType ?? ""),
+      images: list.filter((g: Record<string, any>) => typeof g?.src === "string" && g.src).slice(0, 200).map((g: Record<string, any>) => ({ src: String(g.src), caption: String(g.caption ?? g.alt ?? "").slice(0, 60) })),
+    };
+  }).filter((a) => a.images.length);
+}
 
 function readOpen() { try { const v = sessionStorage.getItem(OPEN_KEY); return BOOKS.some((b) => b.id === v) ? v : null; } catch { return null; } }
 
@@ -36,6 +52,10 @@ export function NotesSection({ demoMode }: { role: "staff" | "admin"; demoMode: 
 
     async function handle(m: Rpc) {
       const { op, args } = m;
+      if (op === "marketing") {
+        if (demoMode) return { assets: [] };
+        return { assets: await loadMarketing() };
+      }
       if (demoMode) {
         if (op === "list") return { docs: [] };
         if (op === "get") return { doc: null };

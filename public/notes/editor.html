@@ -269,6 +269,28 @@ body.final-on .pg .tag,body.final-on .pg .empty,body.final-on .pg .x{display:non
 .tabs small{font-weight:400;color:var(--muted);margin-left:3px;font-variant-numeric:tabular-nums}
 .upload{display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px dashed var(--line);border-radius:10px;padding:9px;color:var(--muted);font-size:13px;cursor:pointer;text-align:center}
 .upload:hover,.tray.over .upload{border-color:var(--accent);color:var(--accent)}
+button.upload{font:inherit;background:none;width:100%}
+.tray-head{gap:8px}
+.tray .tabs button{padding:4px 10px}
+/* 마케팅 제작물에서 불러오기 */
+.panel.mkpanel{width:min(580px,100%);overflow:hidden}
+.mkq{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px}
+.mkhelp{color:var(--muted);font-size:12.5px;margin:0}
+.mklist{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px;padding-right:2px}
+.mka{border:1px solid var(--line);border-radius:10px;background:var(--bg);flex:0 0 auto}
+.mka>.hd{width:100%;text-align:left;border:0;background:none;padding:9px 11px;display:flex;gap:8px;align-items:center;border-radius:10px}
+.mka .hd b{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mka .hd small{color:var(--muted);white-space:nowrap}
+.mka .hd .cnt{margin-left:auto;background:var(--accent);color:#fff;border-radius:10px;padding:0 8px;font-size:11px;font-weight:600;white-space:nowrap}
+.mka .hd .cnt.none{background:var(--line);color:var(--muted)}
+.mka .imgs{display:grid;grid-template-columns:repeat(auto-fill,minmax(88px,1fr));gap:8px;padding:0 11px 11px}
+.mki{position:relative;border:2px solid transparent;border-radius:6px;overflow:hidden;background:var(--paper);padding:0}
+.mki img{display:block;width:100%;aspect-ratio:3/4;object-fit:cover}
+.mki[aria-pressed="true"]{border-color:var(--accent)}
+.mki .ck{position:absolute;top:4px;right:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;font-size:12px;display:grid;place-items:center}
+.mki[aria-pressed="true"] .ck{background:var(--accent)}
+.mkfoot{display:flex;gap:8px;align-items:center;border-top:1px solid var(--line);padding-top:12px}
+.mkfoot span{flex:1;font-size:13px}
 .upload input{position:absolute;width:1px;height:1px;opacity:0}
 .grid{min-width:0;overflow-x:auto;overflow-y:hidden;padding:12px 14px;display:flex;gap:12px;align-items:stretch}
 .sec{flex:0 0 64px;align-self:center;font-size:11.5px;line-height:1.4;letter-spacing:.02em;color:var(--muted);word-break:keep-all}
@@ -414,6 +436,7 @@ body.final-on .pg .tag,body.final-on .pg .empty,body.final-on .pg .x{display:non
       <label class="upload" for="file" id="uploadBox"><span id="upLabel">＋ 표지 이미지 올리기</span>
         <input type="file" id="file" accept="image/*" multiple>
       </label>
+      <button type="button" class="upload mk" id="mkBtn">🗂 마케팅 제작물 불러오기</button>
     </div>
     <div class="grid" id="grid"></div>
   </aside>
@@ -460,6 +483,14 @@ body.final-on .pg .tag,body.final-on .pg .empty,body.final-on .pg .x{display:non
   <button class="btn primary" id="doneSettings">적용하고 닫기</button>
 </div>
 
+<div class="panel mkpanel" id="mkPanel" role="dialog" aria-modal="true" aria-labelledby="mkTitle" hidden>
+  <h2><span id="mkTitle">마케팅 제작물에서 불러오기</span><button id="mkClose" aria-label="닫기">×</button></h2>
+  <input class="mkq" id="mkQ" type="search" placeholder="제목·캠퍼스로 찾기 (예: 합격, 김해, 수상)" autocomplete="off">
+  <p class="mkhelp" id="mkHelp"></p>
+  <div class="mklist" id="mkList"></div>
+  <div class="mkfoot"><span id="mkCount"></span><button class="btn" id="mkCancel">취소</button><button class="btn primary" id="mkAdd" disabled>서랍에 넣기</button></div>
+</div>
+
 <div class="pop" id="pop" hidden></div>
 <div class="toast" id="toast" role="status"><span id="toastMsg"></span><button id="toastBtn" hidden></button></div>
 
@@ -501,6 +532,7 @@ body.final-on .pg .tag,body.final-on .pg .empty,body.final-on .pg .x{display:non
     parent.postMessage({t:'note-ready'}, location.origin);
   }
 
+  window.__noteRpc = rpc;                     // 마케팅 목록처럼 db 밖의 부탁도 같은 길로
   // 편집기의 컬렉션 이름 → 사이트 컬렉션 + id 접두어
   const MAP = {
     notes:        {col:'noteComments', prefix: BOOK + ':n:'},
@@ -1043,7 +1075,7 @@ function renderTray(){
   $('nCover').textContent = cnt('cover'); $('nInner').textContent = cnt('inner');
   $('nCmt').textContent = CM.notes.filter(n => !n.resolved).length || '';
   ['cover','inner','cmt'].forEach(t => $('tab' + {cover:'Cover', inner:'Inner', cmt:'Cmt'}[t]).setAttribute('aria-selected', state.tab === t));
-  $('uploadBox').hidden = state.tab === 'cmt';
+  $('uploadBox').hidden = state.tab === 'cmt'; $('mkBtn').hidden = state.tab === 'cmt';
   $('upLabel').textContent = state.tab==='cover' ? '＋ 표지 이미지 올리기' : '＋ 속지 이미지 올리기';
   gridEl.innerHTML = '';
   if (state.tab === 'cmt') return renderCmtList();
@@ -1053,7 +1085,7 @@ function renderTray(){
     t.className = 'tile' + (im.wide ? ' wide' : ''); t.tabIndex = 0; t.setAttribute('role','button'); t.setAttribute('aria-label', im.name + ' 넣기');
     t.innerHTML = `<img src="${im.src}" alt=""><span class="nm">${esc(im.name)}</span>` +
       (used[im.id] ? `<span class="used" title="노트에 쓴 횟수">${used[im.id]}</span>` : '') +
-      (im.preset ? `<span class="mine">샘플</span>` : im.sample ? '' : im.shared ? `<span class="mine">공유 이미지</span>` : `<span class="mine">내 이미지</span><button class="del" aria-label="서랍에서 지우기">×</button>`);
+      (im.preset ? `<span class="mine">샘플</span>` : im.sample ? '' : im.shared ? `<span class="mine">공유 이미지</span>` : `<span class="mine">${im.mk ? '마케팅 제작물' : '내 이미지'}</span><button class="del" aria-label="서랍에서 지우기">×</button>`);
     t.addEventListener('pointerdown', e => { if (!e.target.closest('.del')) startDrag(e, {from:'tray', id:im.id}); });
     t.addEventListener('keydown', e => { if (e.key==='Enter'||e.key===' ') { e.preventDefault(); clickPlace(im.id, t); } });
     t.querySelector('.del')?.addEventListener('click', e => { e.stopPropagation(); removeUpload(im.id); });
@@ -1129,6 +1161,7 @@ function flyInto(fromRect, slot, src, delay=0){
   if (matchMedia('(prefers-reduced-motion: reduce)').matches || !el.animate) return pulse(el);
   const img = el.querySelector('img'); if (img) img.style.visibility = 'hidden';
   const g = document.createElement('img'); g.src = src; g.className = 'ghost';
+  const done = () => { g.remove(); if (img) img.style.visibility = ''; pulse(el); };
   Object.assign(g.style, {left:to.left+'px', top:to.top+'px', width:to.width+'px', height:to.height+'px', transformOrigin:'0 0'});
   document.body.appendChild(g);
   const dx = fromRect.left - to.left, dy = fromRect.top - to.top, sx = fromRect.width / to.width, sy = fromRect.height / to.height;
@@ -1136,7 +1169,7 @@ function flyInto(fromRect, slot, src, delay=0){
     {transform:`translate(${dx}px,${dy}px) scale(${sx},${sy})`, opacity:.85, easing:'cubic-bezier(.55,0,.75,.4)'},
     {transform:`translate(${dx*.25}px,${dy*.25}px) scale(${.6+sx*.25},${.6+sy*.25})`, opacity:1, offset:.45, easing:'cubic-bezier(.2,1.5,.4,1)'},
     {transform:'none', opacity:1}
-  ], {duration:560, delay, fill:'backwards'}).finished.then(() => { g.remove(); if (img) img.style.visibility = ''; pulse(el); });
+  ], {duration:560, delay, fill:'backwards'}).finished.then(done, done);   // 취소돼도 잔상이 남지 않게
 }
 function pulse(el){ el.classList.remove('snap'); void el.offsetWidth; el.classList.add('snap'); }
 
@@ -1272,6 +1305,10 @@ function finishFlip(to, cb){
 function blankJump(dir){
   if (fl || !B.K) return false;
   const L = visibleItems(), i = curIndex();
+  if (L[i] && L[i].type === 'blank') {   // 백지 묶음 위에서 넘기면 → 백지 전체를 부채처럼 넘겨 옆 펼침면으로
+    const k = i + dir; if (k < 0 || k >= L.length) return false;
+    riffle(dir, k, B.K); return true;
+  }
   const has = (it, key) => it.type === 'blank' ? it.pages.some(p => p.key === key) : [it.l, it.r].some(p => p && p.key === key);
   const j = L.findIndex(it => has(it, dir > 0 ? 'b' + B.K : 'b1'));
   if (j < 0 || (dir > 0 ? j <= i + 1 : j >= i - 1)) return false;   // 한 장 차이면 그냥 한 장 넘김
@@ -1782,7 +1819,7 @@ function ensureImg(id, meta){
   const e = SH.imgs[id] = {id, name:meta?.name || '공유 이미지', cat:meta?.cat || 'inner', wide:!!meta?.wide, src:LOADING, shared:true, loading:true};
   CM.db.doc('book_imgs/' + id).get().then(s => {
     const d = s.exists ? s.data() : null;
-    if (d && srcOk(d.src)) { e.src = d.src; e.name = String(d.name || e.name).slice(0, 80); e.cat = d.cat === 'cover' ? 'cover' : 'inner'; e.wide = !!d.wide; }
+    if (d && (srcOk(d.src) || refOk(d.ref))) { e.src = srcOk(d.src) ? d.src : d.ref; e.name = String(d.name || e.name).slice(0, 80); e.cat = d.cat === 'cover' ? 'cover' : 'inner'; e.wide = !!d.wide; }
     else e.src = MISSING;
     e.loading = false; rerenderSoon();
   }, () => { e.src = MISSING; e.loading = false; rerenderSoon(); });
@@ -1879,6 +1916,7 @@ async function shareNow(){
       if (!up || (SH.imgs[id] && !SH.imgs[id].loading && SH.imgs[id].src !== MISSING)) continue;
       const have = await CM.db.doc('book_imgs/' + id).get();
       if (have.exists) continue;
+      if (up.ref && refOk(up.ref)) { await CM.db.doc('book_imgs/' + id).set({name:up.name, cat:up.cat, wide:!!up.wide, ref:up.ref, by:CM.uid, at:Date.now()}); continue; }
       const src = await toShareSrc(up.src);
       if (!src) throw {code:'too_big', name:up.name};
       await CM.db.doc('book_imgs/' + id).set({name:up.name, cat:up.cat, wide:!!up.wide, src, by:CM.uid, at:Date.now()});
@@ -1991,7 +2029,7 @@ $('linkBack').onchange = e => { draft.linkBack = e.target.checked; renderDraft()
 $('autoFill').onchange = e => { draft.autoFill = e.target.checked; };
 $('openSettings').onclick = openSettings;
 $('closeSettings').onclick = closeSettings;
-$('scrim').onclick = closeSettings;
+$('scrim').onclick = () => { if (!$('mkPanel').hidden) closeMk(); else closeSettings(); };
 $('doneSettings').onclick = () => {
   const before = JSON.parse(JSON.stringify({...state, uploads:undefined}));
   const valid = new Set([...build({...draft, mode:'single'}).items, ...build({...draft, mode:'double'}).items].flatMap(it => it.slots.map(s => s.slot)));
@@ -2048,6 +2086,105 @@ $('tabCover').onclick = () => setTab('cover');
 $('tabInner').onclick = () => setTab('inner');
 $('tabCmt').onclick = () => setTab('cmt');
 
+/* ── 마케팅 제작물에서 불러오기 ───────────────────────────────
+   부모 화면(사이트)이 /api/marketing 을 읽어 목록을 준다.
+   · 사이트 안의 사진(./marketing/…)은 경로만 적어 쓴다(참조, 용량 없음). 공유할 때도 경로만 올라간다.
+   · 만료되는 저장소 주소의 사진은 가져와서 줄여 '직접 올린 이미지'처럼 저장한다(공유 때 256KiB 이하로 한 번 더 줄임). */
+const MK = {assets:null, loading:false, error:'', open:new Set(), sel:new Map(), q:''};
+const refOk = p => typeof p === 'string' && /^\/(marketing|events)\/[^?#:\\]+$/.test(p) && !p.includes('..') && !p.includes('//');
+const sitePath = src => { const p = String(src || '').replace(/^\.\//, '/'); return refOk(p) ? p : null; };   // './marketing/a.webp' → '/marketing/a.webp'
+const mkSrc = src => sitePath(src) || String(src || '');
+function hash36(s){ let h1 = 0xdeadbeef, h2 = 0x41c6ce57; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); h1 = Math.imul(h1 ^ c, 2654435761); h2 = Math.imul(h2 ^ c, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36); }
+const mkCat = () => state.tab === 'cover' ? 'cover' : 'inner';
+function imgSize(u){ return new Promise((res, rej) => { const i = new Image(); i.onload = () => res({w:i.naturalWidth, h:i.naturalHeight}); i.onerror = () => rej(new Error('load')); i.src = u; }); }
+function openMk(){
+  if (!EMBED || !window.__noteRpc) return toast('사이트 안에서 로그인한 뒤 쓸 수 있어요.');
+  MK.sel.clear(); MK.q = ''; $('mkQ').value = '';
+  $('scrim').hidden = false; $('mkPanel').hidden = false; renderMk();
+  if (!MK.assets && !MK.loading) loadMk();
+  $('mkQ').focus();
+}
+function closeMk(){ $('scrim').hidden = true; $('mkPanel').hidden = true; $('mkBtn').focus(); }
+async function loadMk(){
+  MK.loading = true; MK.error = ''; renderMk();
+  try { MK.assets = ((await window.__noteRpc('marketing', {})).assets || []).filter(a => a && Array.isArray(a.images) && a.images.length); }
+  catch (e) { MK.error = (e && e.message) || '마케팅 제작물을 불러오지 못했어요.'; }
+  MK.loading = false; renderMk();
+}
+function mkUpdate(){
+  const n = MK.sel.size;
+  $('mkCount').textContent = n ? `${n}장 선택` : '넣을 사진을 눌러서 고르세요';
+  $('mkAdd').disabled = !n; $('mkAdd').textContent = n ? `${n}장 서랍에 넣기` : '서랍에 넣기';
+  document.querySelectorAll('.mka').forEach(box => {
+    const c = [...MK.sel.keys()].filter(k => k.startsWith(box.dataset.id + '|')).length, b = box.querySelector('.cnt');
+    b.textContent = c ? `${c}장 선택` : `${box.dataset.n}장`; b.classList.toggle('none', !c);
+  });
+}
+function renderMk(){
+  $('mkHelp').textContent = `고른 사진은 서랍의 「${mkCat() === 'cover' ? '표지' : '속지'}」 이미지로 들어가요. 서랍 탭을 바꾼 뒤 다시 열면 다른 쪽으로 넣을 수 있어요.`;
+  const list = $('mkList'); list.innerHTML = '';
+  const msg = t => { const d = document.createElement('div'); d.className = 'tray-empty'; d.textContent = t; list.appendChild(d); };
+  if (MK.loading) { msg('마케팅 제작물을 불러오는 중이에요…'); return mkUpdate(); }
+  if (MK.error) { msg(MK.error); return mkUpdate(); }
+  const q = MK.q.trim().toLowerCase();
+  const assets = (MK.assets || []).filter(a => !q || `${a.title} ${a.branch} ${a.assetType} ${a.createdDate}`.toLowerCase().includes(q));
+  if (!assets.length) { msg(q ? '찾는 제작물이 없어요.' : '사진이 있는 마케팅 제작물이 아직 없어요.'); return mkUpdate(); }
+  assets.forEach(a => {
+    const box = document.createElement('div'); box.className = 'mka'; box.dataset.id = a.id; box.dataset.n = a.images.length;
+    const open = MK.open.has(a.id);
+    const hd = document.createElement('button'); hd.type = 'button'; hd.className = 'hd'; hd.setAttribute('aria-expanded', open);
+    const t = document.createElement('b'); t.textContent = a.title;
+    const sub = document.createElement('small'); sub.textContent = [a.branch, a.createdDate].filter(Boolean).join(' · ');
+    const cnt = document.createElement('span'); cnt.className = 'cnt none'; cnt.textContent = a.images.length + '장';
+    hd.append(t, sub, cnt);
+    hd.onclick = () => { if (MK.open.has(a.id)) MK.open.delete(a.id); else MK.open.add(a.id); renderMk(); };
+    box.appendChild(hd);
+    if (open) {
+      const g = document.createElement('div'); g.className = 'imgs';
+      a.images.forEach((img, i) => {
+        const key = a.id + '|' + i, b = document.createElement('button'); b.type = 'button'; b.className = 'mki'; b.setAttribute('aria-pressed', MK.sel.has(key));
+        b.title = img.caption || `${i + 1}번째 사진`;
+        const im = document.createElement('img'); im.loading = 'lazy'; im.alt = ''; im.src = mkSrc(img.src); im.draggable = false;
+        const ck = document.createElement('span'); ck.className = 'ck'; ck.textContent = '✓';
+        b.append(im, ck);
+        b.onclick = () => { if (MK.sel.has(key)) MK.sel.delete(key); else MK.sel.set(key, {asset:a, img, idx:i}); b.setAttribute('aria-pressed', MK.sel.has(key)); mkUpdate(); };
+        g.appendChild(b);
+      });
+      box.appendChild(g);
+    }
+    list.appendChild(box);
+  });
+  mkUpdate();
+}
+async function addFromMk(){
+  const cat = mkCat(), picks = [...MK.sel.values()];
+  if (!picks.length) return;
+  $('mkAdd').disabled = true; $('mkAdd').textContent = '넣는 중…';
+  let ok = 0, dup = 0, fail = 0;
+  for (const p of picks) {
+    const name = `${p.asset.title} · ${p.img.caption || (p.idx + 1)}`.slice(0, 80);
+    try {
+      const u = sitePath(p.img.src);
+      if (u) {
+        const id = 'um' + hash36(u);
+        if (state.uploads.some(x => x.id === id)) { dup++; continue; }
+        const d = await imgSize(u);
+        state.uploads.unshift({id, cat, name, src:u, ref:u, mk:true, wide: cat === 'inner' && d.w > d.h * 1.15}); ok++;
+      } else {
+        const res = await fetch(p.img.src, {credentials:'omit'}); if (!res.ok) throw new Error('fetch');
+        const blob = await res.blob();
+        const up = await readFile(new File([blob], 'mk.jpg', {type: blob.type || 'image/jpeg'}), cat);
+        if (!up) throw new Error('read');
+        up.name = name; up.mk = true; state.uploads.unshift(up); ok++;
+      }
+    } catch (e) { fail++; }
+  }
+  closeMk(); commit(); gridEl.scrollLeft = 0;
+  toast(ok ? `마케팅 제작물 사진 ${ok}장을 서랍(${cat === 'cover' ? '표지' : '속지'})에 넣었어요.${dup ? ` (이미 있는 ${dup}장은 건너뜀)` : ''}${fail ? ` 가져오지 못한 ${fail}장이 있어요.` : ''}` : dup && !fail ? '이미 서랍에 있는 사진이에요.' : '사진을 가져오지 못했어요. 잠시 후 다시 해 주세요.');
+}
+$('mkBtn').onclick = openMk; $('mkClose').onclick = closeMk; $('mkCancel').onclick = closeMk; $('mkAdd').onclick = addFromMk;
+$('mkQ').oninput = e => { MK.q = e.target.value; renderMk(); };
+
 /* ── 보기 · 이동 ─────────────────────────────── */
 $('vFinal').onclick = () => { leaveCmode(); state.view = 'final'; state.finalOpen = false; state.group = 'all'; sel = null; closePop(); commit(); };
 $('vAll').onclick = () => { leaveCmode(); state.view = 'all'; closePop(); commit(); ovShow(state.cur); };
@@ -2058,6 +2195,7 @@ $('prev').onclick = () => flip(-1);
 $('next').onclick = () => flip(1);
 $('jump').onchange = e => { state.cur = e.target.value; sel = null; closePop(); commit(); };
 document.addEventListener('keydown', e => {
+  if (!$('mkPanel').hidden) { if (e.key === 'Escape') closeMk(); return; }
   if (!$('panel').hidden) { if (e.key === 'Escape') closeSettings(); return; }
   if (e.target.closest('input,select,textarea')) return;
   if (e.key === 'Escape') { if (!pop.hidden) return closePop(); if (state.tool && state.tool !== 'none') return setTool('none'); if (sel) return toggleSel(sel); }
