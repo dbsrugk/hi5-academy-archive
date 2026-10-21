@@ -106,7 +106,7 @@ export function NotesSection({ demoMode }: { role: "staff" | "admin"; demoMode: 
           key={book.id}
           title={book.title}
           src={`/notes/editor.html?book=${encodeURIComponent(book.id)}`}
-          className="h-[calc(100dvh-200px)] min-h-[620px] w-full rounded-2xl border bg-background"
+          className="h-[calc(100dvh-132px)] min-h-[560px] w-full rounded-2xl md:h-[calc(100dvh-200px)] md:min-h-[620px] border bg-background"
         />
       </div>
     );

@@ -385,6 +385,148 @@ button.upload{font:inherit;background:none;width:100%}
   .cmode{flex:none;height:82vh;gap:8px}
   .vt{width:36px;height:36px;font-size:17px}
 }
+
+/* ═════════ 모바일 (좁은 화면 · 가로로 돌린 폰) ═════════
+   body.mob 일 때만 적용. 데스크톱 화면은 그대로. */
+.tabbar,.sheethd,.mobonly,.pview,.ovm,.sheet{display:none}
+body.mob{padding:0}
+body.mob .app{display:flex;flex-direction:column;height:100%;max-width:none;gap:0}
+body.mob header{flex:0 0 auto;flex-direction:column;align-items:flex-start;gap:0;padding:8px 14px 7px;background:var(--surface);border-bottom:1px solid var(--line)}
+body.mob header .pills,body.mob header #shareBtn,body.mob header #openSettings{display:none}
+body.mob h1{font-family:var(--f-body);font-size:15px;font-weight:600;margin:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.mob .progress{flex:none;min-width:0;font-size:12px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body.mob .stage{flex:1;min-height:0;gap:0;align-items:stretch;overflow:hidden}
+body.mob .hint{display:none}
+body.mob .sharebar{display:none}
+body.mob .bar{justify-content:flex-start;flex-wrap:nowrap;overflow-x:auto;gap:8px;padding:10px 12px 4px;flex:0 0 auto}
+body.mob .bar .nav{display:none}
+body.mob .bar .pills{border:0;background:none;padding:0;gap:8px;flex-wrap:nowrap}
+body.mob .bar .pills button{height:36px;padding:0 14px;border-radius:18px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:13px;white-space:nowrap}
+body.mob .bar .pills button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}
+body.mob .overview,body.mob .bookwrap{display:none}
+body.mob .mobonly{display:inline-flex}
+body.mob .toast{bottom:calc(86px + env(safe-area-inset-bottom,0px))}
+/* 아래 4칸 메뉴 */
+body.mob .tabbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));flex:0 0 auto;background:var(--surface);border-top:1px solid var(--line);padding:6px 6px calc(8px + env(safe-area-inset-bottom,0px))}
+body.mob .tabbar button{position:relative;border:0;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:52px;font-size:12px}
+body.mob .tabbar svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+body.mob .tabbar button[aria-current="true"]{color:var(--accent);font-weight:600}
+body.mob .tabbar .bd{position:absolute;top:2px;left:56%;min-width:18px;height:18px;padding:0 5px;box-sizing:border-box;border-radius:9px;background:var(--accent);color:#fff;font-size:11px;font-style:normal;font-weight:600;display:grid;place-items:center}
+body.reading .tabbar,body.reading header,body.reading .bar{display:none}
+/* 한 쪽씩 보기 */
+body.mob .pview{display:flex;flex-direction:column;flex:1;min-height:0}
+body.mob .pview[hidden],body.mob .ovm[hidden]{display:none}
+.pvtop{display:none}
+body.mob .pvwrap{flex:1;min-height:0;touch-action:pan-y}
+body.mob .pvwrap .zoom{box-shadow:0 14px 34px rgba(20,35,55,.28);border-radius:6px}
+.pvnav{display:flex;align-items:center;gap:10px;padding:6px 16px 0}
+.pvarrow{width:44px;height:44px;border-radius:22px;border:1px solid var(--line);background:var(--surface);font-size:22px;line-height:1}
+.pvarrow:disabled{opacity:.35}
+.pvlabel{flex:1;text-align:center;min-width:0}
+.pvlabel b{display:block;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pvlabel small{display:block;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.pvrange{width:calc(100% - 32px);margin:8px 16px 0;accent-color:var(--accent);height:28px}
+.pvact{display:flex;gap:10px;padding:6px 16px 12px}
+.pvpick{flex:1;height:48px;border-radius:12px;border:0;background:var(--accent);color:#fff;font-size:15px;font-weight:600}
+.pvpick:disabled{background:var(--line);color:var(--muted)}
+.pvicon{width:48px;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:18px}
+.pvtip{display:none;text-align:center;font-size:12.5px;color:var(--muted);padding:0 20px 10px}
+/* 펼친 최종본 읽기 (세로) */
+body.reading .pview{background:#dfe5ec}
+body.reading .pvtop{display:flex;align-items:center;gap:8px;padding:10px 12px;flex:0 0 auto}
+body.reading .pvtop span{flex:1;text-align:right;font-size:13px;color:var(--muted)}
+body.reading .pvact{display:none}
+body.reading .pvtip{display:block;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px))}
+body.reading .pvrange{margin-bottom:6px}
+body.reading .pvwrap .zoom{position:relative}
+body.reading .pvwrap .zoom::after{content:"";position:absolute;right:0;bottom:0;width:60px;height:60px;pointer-events:none;border-radius:0 0 6px 0;background:linear-gradient(315deg,#e9e3d6 0 46%,rgba(0,0,0,.26) 50%,transparent 62%)}
+/* 두 줄 모아보기 */
+body.mob .ovm{display:block;flex:1;min-height:0;overflow-y:auto;padding:6px 16px 16px;-webkit-overflow-scrolling:touch}
+.ovmgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 12px}
+.ovmcard{border:0;background:none;padding:0;text-align:left;display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--ink)}
+.ovmcard .pgbox{position:relative;width:100%;aspect-ratio:var(--pr);border-radius:6px;overflow:hidden;box-shadow:0 4px 12px rgba(20,35,55,.2);background:var(--paper)}
+.ovmcard .pgbox.two{aspect-ratio:var(--pr2)}
+.ovmcard .pgbox>.spread{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto}
+.ovmcard .pgbox.todo{outline:2px dashed var(--accent);outline-offset:-2px}
+.ovmcard .cap2{display:flex;justify-content:space-between;gap:6px;font-size:12px}
+.ovmcard .cap2 b{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ovmcard .cap2 span{color:var(--muted);white-space:nowrap}
+.ovmblank{grid-column:1/-1;display:flex;align-items:center;gap:14px;padding:12px 14px;border-radius:12px;background:var(--surface);border:1px dashed var(--ring);text-align:left;color:var(--ink)}
+.ovmblank .stack{position:relative;width:44px;height:52px;flex:0 0 auto}
+.ovmblank .stack i{position:absolute;width:36px;height:46px;border-radius:3px;background:var(--paper);border:1px solid var(--line)}
+.ovmblank .stack i:nth-child(1){left:8px;top:0}.ovmblank .stack i:nth-child(2){left:4px;top:3px}.ovmblank .stack i:nth-child(3){left:0;top:6px;border-color:var(--ring)}
+.ovmblank b{display:block;font-size:15px}
+.ovmblank small{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+/* 이미지 서랍 → 아래에서 올라오는 창 */
+body.mob .tray{position:fixed;left:0;right:0;bottom:0;z-index:42;height:min(62vh,470px);display:flex;flex-direction:column;border-radius:22px 22px 0 0;border:0;box-shadow:0 -10px 30px rgba(10,20,35,.25);transform:translateY(108%);transition:transform .26s ease;grid-template-columns:none}
+body.mob.trayopen .tray{transform:none}
+body.mob .sheethd{display:block;flex:0 0 auto}
+.sheethd .grab{width:40px;height:5px;border-radius:3px;background:var(--line);margin:10px auto 4px}
+.sheethd .shrow{display:flex;align-items:center;gap:8px;padding:2px 8px 2px 20px}
+.sheethd .shrow>div{flex:1;min-width:0}
+.sheethd b{display:block;font-size:16px;font-weight:700}
+.sheethd small{display:block;font-size:12px;color:var(--muted)}
+.sheethd button{width:44px;height:44px;border:0;background:none;font-size:18px;color:var(--ink)}
+body.mob .tray-head{border-right:0;border-bottom:0;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;padding:6px 16px 8px;gap:8px}
+body.mob .tray .tabs{display:flex;gap:8px;background:none;padding:0;grid-template-columns:none;flex:0 0 auto}
+body.mob .tray .tabs button{height:40px;padding:0 16px;border-radius:20px;border:1px solid var(--line);background:var(--surface);text-align:center}
+body.mob .tray .tabs button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink);box-shadow:none}
+body.mob #tabCmt{display:none}
+body.mob .tray .upload{width:auto;flex:1 1 140px;min-height:40px;padding:0 10px}
+body.mob .grid{flex:1;min-height:0;padding:4px 16px 20px;align-items:flex-start}
+body.mob .tile{touch-action:pan-x}
+body.mob .tile img{height:150px}
+body.mob .clist{flex-direction:column;height:auto;width:100%}
+body.mob .clist .citem,body.mob .clist .hot3,body.mob .clist .cnotice{width:100%}
+body.mob .cfilter{flex-direction:row;flex-wrap:wrap}
+body.mob.trayopen .grid:has(.clist){overflow-x:hidden;overflow-y:auto;flex-direction:column}
+/* 더보기 · 알림창들을 아래에서 */
+body.mob .scrim{z-index:41}
+body.mob .panel{z-index:44}
+body.mob .pop{z-index:46;left:12px!important;right:12px;top:auto!important;bottom:calc(12px + env(safe-area-inset-bottom,0px));width:auto;max-height:68vh}
+body.mob .sheet{display:block;position:fixed;left:0;right:0;bottom:0;z-index:44;max-height:82vh;overflow-y:auto;background:var(--surface);border-radius:22px 22px 0 0;box-shadow:0 -10px 30px rgba(10,20,35,.25);padding:0 8px calc(16px + env(safe-area-inset-bottom,0px))}
+body.mob .sheet[hidden]{display:none}
+.mstatus{margin:6px 12px 4px;padding:12px 14px;border-radius:12px;background:var(--accent-soft);font-size:13px;line-height:1.45}
+.mi{width:100%;min-height:56px;border:0;background:none;text-align:left;display:flex;align-items:center;gap:14px;padding:0 12px;color:var(--ink);font-size:15px}
+.mi .ic{width:40px;height:40px;border-radius:20px;background:var(--bg);display:grid;place-items:center;flex:0 0 auto}
+.mi.primary .ic{background:var(--accent);color:#fff}
+.mi.primary{font-weight:600}
+.mi svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mi .tx{flex:1;min-width:0}
+.mi small{display:block;font-size:12px;font-weight:400;color:var(--muted);margin-top:1px}
+.mi:disabled{opacity:.45}
+.msep{height:1px;background:var(--line);margin:6px 12px}
+/* 코멘트 모드: 도구는 아래 한 줄, 목록은 아래 창 */
+body.mob .cmode{display:flex;flex-direction:column;flex:1;min-height:0;gap:8px;height:auto}
+body.mob .cmode[hidden]{display:none}
+body.mob .chead{flex:0 0 auto;padding:6px 12px 0;gap:6px}
+body.mob .chead #cClose{display:none}
+body.mob .chead .sp{display:none}
+body.mob .chead b{flex:1;font-size:15px}
+body.mob .cmode .zwrap{flex:1;min-height:0;order:2}
+body.mob .cmode .vtools{order:3}
+body.mob.cmtab .tray .tabs,body.mob.cmtab .tray .upload{display:none}
+body.mob .thumbs{display:none}
+body.mob .vtools{flex:0 0 auto;flex-direction:row;align-items:center;justify-content:space-between;max-height:none;width:calc(100% - 24px);margin:0 12px 10px;overflow-x:auto;padding:6px;border-radius:16px}
+body.mob .vsep{width:1px;height:28px;margin:0 2px}
+body.mob .vt{width:44px;height:44px}
+/* 최종본: 닫힌 노트 */
+body.mob .final{padding:0 16px 10px;gap:10px}
+body.mob .fctl{display:grid;grid-template-columns:1fr 1fr;width:100%}
+body.mob #fOpen{grid-column:1/-1;height:50px;font-size:16px}
+body.mob .fscene{min-height:0}
+/* 가로로 돌린 폰: 펼친 노트를 화면 가득 */
+body.mobl header,body.mobl .tabbar{display:none}
+body.mobl .stage{position:relative}
+body.mobl .bar{position:absolute;left:0;right:0;top:0;z-index:5;padding:8px 12px;pointer-events:none}
+body.mobl .bar>*{pointer-events:auto}
+body.mobl .bar .nav{display:flex}
+body.mobl .bookwrap{display:flex;padding:0 0 10px;container-type:size}
+body.mobl .flipbox{width:min(100cqw,calc(100cqh * var(--pr2)))}
+body.mobl.final-on .bookwrap.final{padding-bottom:20px}
+body.mobl .bookwrap.final .flipbox{transform:rotateX(8deg)}
+body.mobl .tray{height:84vh}
+
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
@@ -425,16 +567,35 @@ button.upload{font:inherit;background:none;width:100%}
       <div class="chead">
         <b id="cTitle"></b><span class="sp"></span>
         <div class="nav"><button class="arrow" id="cPrev" aria-label="이전 페이지">‹</button><button class="arrow" id="cNext" aria-label="다음 페이지">›</button></div>
+        <button class="btn mobonly" id="cList" aria-label="코멘트 목록 열기">💬 <span id="cListN">0</span></button>
         <button class="btn" id="cClose">코멘트 모드 닫기</button>
       </div>
       <div class="vtools" id="vtools" role="toolbar" aria-orientation="vertical" aria-label="코멘트 도구"></div>
       <div class="zwrap"><div class="zoom" id="zoom"></div></div>
       <div class="thumbs" id="thumbs" aria-label="페이지 목록"></div>
     </div>
+    <div class="pview" id="pview" hidden>
+      <div class="pvtop" id="pvTop"><button class="btn" id="pvClose">📕 덮기</button><span id="pvWhere"></span></div>
+      <div class="zwrap pvwrap" id="pvwrap"><div class="zoom" id="pvzoom"></div></div>
+      <div class="pvnav">
+        <button class="pvarrow" id="pvPrev" aria-label="이전 쪽">‹</button>
+        <div class="pvlabel"><b id="pvName"></b><small id="pvSub"></small></div>
+        <button class="pvarrow" id="pvNext" aria-label="다음 쪽">›</button>
+      </div>
+      <input class="pvrange" id="pvRange" type="range" min="0" max="1" value="0" aria-label="쪽 위치">
+      <div class="pvact" id="pvAct">
+        <button class="pvpick" id="pvPick">🖼 이 쪽 이미지 바꾸기</button>
+        <button class="pvicon" id="pvClear" aria-label="이 쪽 비우기">✕</button>
+        <button class="pvicon" id="pvGrid" aria-label="모아보기">▦</button>
+      </div>
+      <div class="pvtip" id="pvTip">가로로 돌리면 두 쪽을 함께 봐요 · 백지는 누르거나 끌면 한 번에 넘어가요</div>
+    </div>
+    <div class="ovm" id="ovm" hidden></div>
     <div class="hint" id="hint"></div>
   </section>
 
   <aside class="tray" id="tray" aria-label="서랍">
+    <div class="sheethd" id="trayHd"><div class="grab"></div><div class="shrow"><div><b id="trayTitle">이미지</b><small id="traySub"></small></div><button id="trayClose" aria-label="닫기">✕</button></div></div>
     <div class="tray-head">
       <div class="tabs" role="tablist" aria-label="서랍 종류">
         <button role="tab" id="tabCover" aria-selected="true">표지<small id="nCover"></small></button>
@@ -448,9 +609,26 @@ button.upload{font:inherit;background:none;width:100%}
     </div>
     <div class="grid" id="grid"></div>
   </aside>
+  <nav class="tabbar" id="tabbar" aria-label="메뉴">
+    <button id="tbEdit"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg><span>편집</span></button>
+    <button id="tbFinal"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5C5.5 4.5 8.5 4.5 12 6.5c3.5-2 6.5-2 9-1V19c-2.5-1-5.5-1-9 1-3.5-2-6.5-2-9-1z"/><path d="M12 6.5V20"/></svg><span>최종본</span></button>
+    <button id="tbCmt"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg><span>코멘트</span><i class="bd" id="tbBadge" hidden></i></button>
+    <button id="tbMore"><svg viewBox="0 0 24 24" aria-hidden="true" style="fill:currentColor;stroke:none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg><span>더보기</span></button>
+  </nav>
 </div>
 
 <div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="more" role="dialog" aria-modal="true" aria-label="더보기" hidden>
+  <div class="sheethd"><div class="grab"></div></div>
+  <div class="mstatus" id="mStatus" hidden></div>
+  <button class="mi primary" id="miShare"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 14v5a1 1 0 001 1h12a1 1 0 001-1v-5"/></svg></span><span class="tx">이 구성 공유하기<small>모든 직원이 같은 구성을 봐요</small></span></button>
+  <button class="mi" id="miBack" hidden><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></span><span class="tx">공유 구성으로 돌아가기</span></button>
+  <button class="mi" id="miHist"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 108-8 8 8 0 00-6 2.7M4 4v4h4M12 8v4l3 2"/></svg></span><span class="tx">이전 공유본 보기 · 되돌리기</span></button>
+  <button class="mi" id="miSet"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></span><span class="tx">페이지 설정<small>쪽수 · 단면/양면 · 백지 · 페이지 크기</small></span></button>
+  <div class="msep"></div>
+  <button class="mi" id="miUp"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M4 17v3h16v-3"/></svg></span><span class="tx">내 이미지 올리기</span></button>
+  <button class="mi" id="miMk"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/></svg></span><span class="tx">마케팅 제작물에서 불러오기</span></button>
+</div>
 <div class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="ptitle" hidden>
   <h2><span id="ptitle">페이지 설정</span><button id="closeSettings" aria-label="닫기">×</button></h2>
   <div class="field">
@@ -698,6 +876,7 @@ if (!state || typeof state.frontCount !== 'number') {
 }
 state.uploads = state.uploads || []; state.fill = state.fill || {};
 state.ratio = state.ratio || R_A4;
+state.mview = state.mview || 'page';   // 모바일 편집: 'page'(한 쪽씩) | 'grid'(모아보기)
 const applyRatio = () => { const r = state.ratio || R_A4, st = document.documentElement.style; st.setProperty('--pr', r); st.setProperty('--pr2', r * 2); };
 applyRatio();
 let sel = null;
@@ -863,6 +1042,7 @@ function renderCmode(){
   if (i < 0) { i = 0; state.cpage = U[0].id; }
   const u = U[i];
   $('cTitle').textContent = u.label + (u.two ? ' · 두 쪽 함께' : '');
+  $('cListN').textContent = CM.notes.filter(n => !n.resolved).length;
   $('cPrev').disabled = i === 0; $('cNext').disabled = i === U.length - 1;
   const z = $('zoom'); z.className = 'zoom' + (u.two ? ' two' : ''); z.innerHTML = '';
   const node = unitNode(u), c = document.createElement('div');
@@ -911,10 +1091,11 @@ function renderBook(){
   const L = visibleItems();
   if (!L.length) { state.group = 'all'; toast('이 묶음은 지금 구성에 없어요.'); return renderBook(); }
   if (!L.some(it => it.id === state.cur)) state.cur = L[0].id;
-  const cm = !!state.cmode, all = state.view === 'all' && !cm, fin = state.view === 'final' && !cm, closed = fin && !state.finalOpen;
-  $('cmode').hidden = !cm; $('bar').hidden = cm || closed;
+  const cm = !!state.cmode, mobEdit = MOB && state.view === 'all' && !cm, mobRead = MOB && !MOBL && state.view === 'final' && state.finalOpen && !cm;
+  const all = state.view === 'all' && !cm && !mobEdit, fin = state.view === 'final' && !cm, closed = fin && !state.finalOpen;
+  $('cmode').hidden = !cm; $('bar').hidden = cm || closed || mobRead;
   $('final').hidden = !closed;
-  $('bookwrap').hidden = all || cm || closed; $('nav').hidden = all; $('overview').hidden = !all;
+  $('bookwrap').hidden = all || cm || closed || mobEdit || mobRead; $('nav').hidden = all || mobEdit; $('overview').hidden = !all;
   $('bookwrap').classList.toggle('final', fin); document.body.classList.toggle('final-on', fin);
   $('groups').hidden = fin; $('fClose').hidden = !fin;
   $('vAll').setAttribute('aria-pressed', all); $('vFinal').setAttribute('aria-pressed', fin);
@@ -924,6 +1105,7 @@ function renderBook(){
   const g = $('groups'); g.innerHTML = '';
   GROUPS.forEach(([k, t]) => { const b = document.createElement('button'); b.textContent = t; b.setAttribute('aria-pressed', state.group === k); b.onclick = () => { state.group = k; sel = null; commit(); }; g.appendChild(b); });
   if (cm) { $('flipbox').innerHTML = ''; $('overview').innerHTML = ''; renderCmode(); }
+  else if (mobEdit || mobRead) { $('zoom').innerHTML = ''; $('flipbox').innerHTML = ''; $('overview').innerHTML = ''; }
   else if (all) { $('zoom').innerHTML = ''; renderOverview(L); }
   else if (closed) { $('zoom').innerHTML = ''; $('flipbox').innerHTML = ''; renderFinal(); }
   else {
@@ -942,6 +1124,7 @@ function renderBook(){
   const inn = slots.filter(s => catOf(s)==='inner');
   $('progress').innerHTML = `표지 <b>${['front','back'].filter(done).length}/2</b> · 속지 <b>${inn.filter(done).length}/${inn.length}</b>칸 채움 · 백지 ${B.K}쪽`;
   updateHint(); renderTools(); drawComments(); renderShareBar();
+  renderMob(mobEdit, mobRead);
 }
 // 전체 보기: 모든 장을 한 줄 슬라이드로. 넘기기는 ‹ › 버튼으로만
 function renderOverview(L){
@@ -1053,6 +1236,7 @@ $('fBack').onclick = () => turnTo(152);
 $('fOpen').onclick = () => {
   // 뒤표지가 보이게 돌려 놓았으면 뒤에서부터 펼침
   const fromBack = Math.cos(FR.y * Math.PI / 180) < 0;
+  if (MOB && !MOBL) { const U = cUnits(); state.finalOpen = true; state.ppage = U[fromBack ? U.length - 1 : 0].id; sel = null; closePop(); commit(); return; }
   state.finalOpen = true; state.group = 'all'; state.cur = B.items[fromBack ? B.items.length - 1 : 0].id; sel = null; closePop(); commit();
   setTimeout(() => flip(fromBack ? -1 : 1), 380);   // 표지가 넘어가며 열림
 };
@@ -1161,6 +1345,7 @@ function clickPlace(id, fromEl){
   if (state.view === 'spread') { const it = itemOfSlot(slot); moved = it.id !== state.cur; state.cur = it.id; if (!visibleItems().includes(it)) state.group = 'all'; }
   commit();
   flyInto(from, slot, im.src, moved ? 120 : 0);
+  if (MOB) closeTray();
 }
 function flyInto(fromRect, slot, src, delay=0){
   const el = document.querySelector(`.pg[data-slot="${slot}"]`); if (!el) return;
@@ -1374,6 +1559,7 @@ function riffle(dir, j, pages){
   Promise.all(anims).then(() => { fl = null; state.cur = tgt.id; sel = null; commit(); toast(dir > 0 ? `백지 ${B.N + 1}–${B.N + B.K}쪽을 건너뛰었어요.` : '백지 앞으로 돌아왔어요.'); });
 }
 function flip(dir){
+  if (MOB && pvActive()) return pvStep(dir);
   if (fl || !(state.view === 'spread' || (state.view === 'final' && state.finalOpen))) return;
   const L = visibleItems(), j = curIndex() + dir;
   if (j < 0 || j >= L.length) return;
@@ -1997,7 +2183,7 @@ function openSettings(){
   renderDraft();
   $('scrim').hidden = false; $('panel').hidden = false; $('closeSettings').focus();
 }
-function closeSettings(){ $('scrim').hidden = true; $('panel').hidden = true; $('ptitle').textContent = '페이지 설정'; $('openSettings').focus(); }
+function closeSettings(){ $('scrim').hidden = !document.body.classList.contains('trayopen'); $('panel').hidden = true; $('ptitle').textContent = '페이지 설정'; $('openSettings').focus(); }
 function renderDraft(){
   if (draft.linkBack) draft.backCount = draft.frontCount;
   const ms = $('modeSeg'); ms.innerHTML = '';
@@ -2043,7 +2229,7 @@ $('linkBack').onchange = e => { draft.linkBack = e.target.checked; renderDraft()
 $('autoFill').onchange = e => { draft.autoFill = e.target.checked; };
 $('openSettings').onclick = openSettings;
 $('closeSettings').onclick = closeSettings;
-$('scrim').onclick = () => { if (!$('mkPanel').hidden) closeMk(); else closeSettings(); };
+$('scrim').onclick = () => { if (!$('mkPanel').hidden) closeMk(); else if (!$('panel').hidden) closeSettings(); else if (!$('more').hidden) closeMore(); else if (document.body.classList.contains('trayopen')) closeTray(); };
 $('doneSettings').onclick = () => {
   const before = JSON.parse(JSON.stringify({...state, uploads:undefined}));
   const valid = new Set([...build({...draft, mode:'single'}).items, ...build({...draft, mode:'double'}).items].flatMap(it => it.slots.map(s => s.slot)));
@@ -2091,7 +2277,7 @@ function removeUpload(id){
   state.uploads.splice(idx, 1); commit();
   toast(`'${item.name}'을 지웠어요.`, '되돌리기', () => { state.uploads.splice(idx, 0, item); refs.forEach(k => state.fill[k] = id); commit(); });
 }
-$('file').onchange = e => { addFiles(e.target.files); e.target.value = ''; };
+$('file').onchange = e => { addFiles(e.target.files); e.target.value = ''; if (MOB) setTimeout(openTray, 300); };
 const tray = $('tray');
 tray.addEventListener('dragover', e => { e.preventDefault(); tray.classList.add('over'); });
 tray.addEventListener('dragleave', () => tray.classList.remove('over'));
@@ -2118,7 +2304,7 @@ function openMk(){
   if (!MK.assets && !MK.loading) loadMk();
   $('mkQ').focus();
 }
-function closeMk(){ $('scrim').hidden = true; $('mkPanel').hidden = true; $('mkBtn').focus(); }
+function closeMk(){ $('scrim').hidden = !document.body.classList.contains('trayopen'); $('mkPanel').hidden = true; $('mkBtn').focus(); }
 async function loadMk(){
   MK.loading = true; MK.error = ''; renderMk();
   try { MK.assets = ((await window.__noteRpc('marketing', {})).assets || []).filter(a => a && Array.isArray(a.images) && a.images.length); }
@@ -2249,6 +2435,124 @@ function toast(msg, label, fn){
   $('toast').classList.add('on'); clearTimeout(tt);
   tt = setTimeout(() => $('toast').classList.remove('on'), label ? 5000 : 2600);
 }
+
+/* ── 모바일 화면 (좁은 화면 · 가로로 돌린 폰) ──────────────────────────
+   body.mob 일 때만: 한 쪽씩 보기(pview) · 두 줄 모아보기(ovm) · 아래 4칸 메뉴 · 이미지 서랍은 아래 창 · 더보기 창.
+   데스크톱은 그대로. 세로 폰의 펼친 최종본은 한 쪽씩 읽는 화면(pview.reader), 가로 폰은 두 쪽 펼침(기존). */
+const mqMob = matchMedia('(max-width: 760px), (orientation: landscape) and (max-height: 520px)');
+const mqLand = matchMedia('(orientation: landscape) and (max-height: 520px)');
+let MOB = mqMob.matches, MOBL = MOB && mqLand.matches;
+function applyMob(){ MOB = mqMob.matches; MOBL = MOB && mqLand.matches; document.body.classList.toggle('mob', MOB); document.body.classList.toggle('mobl', MOBL); if (!MOB) { document.body.classList.remove('trayopen', 'reading'); } }
+applyMob();
+mqMob.addEventListener('change', () => { applyMob(); closeTray(); closeMore(); renderBook(); renderTray(); });
+mqLand.addEventListener('change', () => { applyMob(); renderBook(); });
+
+const pvActive = () => MOB && !$('pview').hidden;
+const curUnitIdx = () => { const U = cUnits(); const i = U.findIndex(u => u.id === state.ppage); return {U, i: i < 0 ? 0 : i}; };
+const unitGroups = u => u.page ? new Set([u.page.group]) : u.item ? (u.item.type === 'blank' ? new Set(['blank']) : u.item.groups) : new Set();
+const unitFilled = u => !u.slot || !!state.fill[u.slot.slot];
+
+function pvStep(dir){
+  const {U, i} = curUnitIdx(); const j = i + dir;
+  if (j < 0 || j >= U.length) return toast(dir > 0 ? '마지막 쪽이에요.' : '첫 쪽이에요.');
+  state.ppage = U[j].id; save(); renderPview(dir);
+}
+function renderPview(slideDir){
+  const reader = document.body.classList.contains('reading');
+  const {U, i} = curUnitIdx(); const u = U[i]; state.ppage = u.id;
+  const z = $('pvzoom'); z.className = 'zoom' + (u.two ? ' two' : ''); z.innerHTML = '';
+  z.appendChild(unitNode(u));
+  if (slideDir && z.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches) z.animate([{transform:`translateX(${slideDir * 44}px)`, opacity:.2}, {transform:'none', opacity:1}], {duration:200, easing:'ease-out'});
+  $('pvName').textContent = u.label;
+  const filled = unitFilled(u);
+  $('pvSub').textContent = `${i + 1} / ${U.length}` + (u.slot ? (filled ? ' · 이미지 있음' : ' · 비어 있음') : ' · 백지');
+  $('pvWhere').textContent = u.label;
+  $('pvPrev').disabled = i === 0; $('pvNext').disabled = i === U.length - 1;
+  const rg = $('pvRange'); rg.max = U.length - 1; rg.value = i;
+  $('pvPick').disabled = !u.slot; $('pvPick').textContent = u.slot ? (filled ? '🖼 이 쪽 이미지 바꾸기' : '🖼 이 쪽에 이미지 넣기') : '백지에는 이미지를 넣지 않아요';
+  $('pvClear').disabled = !u.slot || !filled;
+}
+function renderOvm(){
+  const box = $('ovm'), top = box.scrollTop; box.innerHTML = '';
+  const g = document.createElement('div'); g.className = 'ovmgrid';
+  cUnits().filter(u => state.group === 'all' || unitGroups(u).has(state.group)).forEach(u => {
+    if (u.item && u.item.type === 'blank') {
+      const b = document.createElement('button'); b.className = 'ovmblank';
+      b.innerHTML = `<span class="stack"><i></i><i></i><i></i></span><span style="flex:1;min-width:0"><b>${esc(u.label)} <span style="font-weight:400;color:var(--muted)">${B.K}쪽</span></b><small>줄 노트 · 누르면 열어서 한 번에 넘겨요</small></span>`;
+      b.onclick = () => { state.ppage = u.id; state.mview = 'page'; save(); renderBook(); };
+      return g.appendChild(b);
+    }
+    const c = document.createElement('button'); c.className = 'ovmcard'; c.setAttribute('aria-label', u.label);
+    const pg = document.createElement('div'); pg.className = 'pgbox' + (u.two ? ' two' : '') + (!unitFilled(u) ? ' todo' : ''); pg.appendChild(unitNode(u));
+    const cap = document.createElement('div'); cap.className = 'cap2'; cap.innerHTML = `<b>${esc(u.short)}</b><span>${unitFilled(u) ? '' : '비어 있음'}</span>`;
+    c.append(pg, cap);
+    c.onclick = () => { state.ppage = u.id; state.mview = 'page'; save(); renderBook(); };
+    g.appendChild(c);
+  });
+  box.appendChild(g); box.scrollTop = top;
+}
+function renderMob(edit, read){
+  document.body.classList.toggle('reading', !!read);
+  const showP = (edit && state.mview !== 'grid') || read, showG = edit && state.mview === 'grid';
+  $('pview').hidden = !showP; $('ovm').hidden = !showG; $('pview').classList.toggle('reader', !!read);
+  if (!MOB) { $('pview').hidden = true; $('ovm').hidden = true; return; }
+  if (showP) renderPview();
+  if (showG) renderOvm();
+  const cm = !!state.cmode;
+  $('tbEdit').setAttribute('aria-current', !cm && state.view === 'all'); $('tbFinal').setAttribute('aria-current', !cm && state.view === 'final'); $('tbCmt').setAttribute('aria-current', cm);
+  const n = CM.notes.filter(x => !x.resolved).length; $('tbBadge').hidden = !n; $('tbBadge').textContent = n;
+  if (!cm) { const t = $('trayTitle'); }
+}
+// 쪽 넘기기: 단추 · 슬라이더 · 밀기(스와이프) · 읽기에서는 양옆 누르기
+$('pvPrev').onclick = () => pvStep(-1); $('pvNext').onclick = () => pvStep(1);
+$('pvRange').oninput = e => { const U = cUnits(); const u = U[+e.target.value]; if (u) { state.ppage = u.id; renderPview(); } };
+$('pvRange').onchange = () => save();
+$('pvClose').onclick = () => $('fClose').click();
+$('pvGrid').onclick = () => { state.mview = 'grid'; save(); renderBook(); };
+$('pvClear').onclick = () => { const {U, i} = curUnitIdx(), u = U[i]; if (!u.slot || !state.fill[u.slot.slot]) return; const slot = u.slot.slot, old = state.fill[slot]; delete state.fill[slot]; commit(); toast(`${slotName(slot)}에서 뺐어요.`, '되돌리기', () => { state.fill[slot] = old; commit(); }); };
+$('pvPick').onclick = () => { const {U, i} = curUnitIdx(), u = U[i]; if (!u.slot) return; sel = null; toggleSel(u.slot.slot); openTray(); };
+(() => {
+  const w = $('pvwrap'); let g = null;
+  w.addEventListener('pointerdown', e => { g = {x:e.clientX, y:e.clientY, t:performance.now(), moved:false}; });
+  w.addEventListener('pointermove', e => { if (g && Math.abs(e.clientX - g.x) > 10) g.moved = true; });
+  const end = e => {
+    if (!g) return; const d = g, dx = e.clientX - d.x, dy = e.clientY - d.y; g = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.3) return pvStep(dx < 0 ? 1 : -1);
+    if (!d.moved && document.body.classList.contains('reading')) { const r = w.getBoundingClientRect(); pvStep(e.clientX >= r.left + r.width / 2 ? 1 : -1); }   // 읽기: 오른쪽 누르면 다음, 왼쪽은 이전
+  };
+  w.addEventListener('pointerup', end); w.addEventListener('pointercancel', () => { g = null; });
+})();
+
+// 아래 이미지 창
+function updateTrayTitle(){
+  const cm = state.tab === 'cmt';
+  $('trayTitle').textContent = cm ? `코멘트 ${CM.notes.filter(n => !n.resolved).length}` : sel ? `${slotName(sel)}에 넣을 이미지` : '이미지';
+  $('traySub').textContent = cm ? '누르면 그 쪽으로 이동해요' : sel ? `${catOf(sel) === 'cover' ? '표지' : '속지'} · 이미지를 누르면 이 쪽에 들어가요` : '쪽을 먼저 고른 뒤 이미지를 눌러요';
+}
+function openTray(){ if (!MOB) return; document.body.classList.toggle('cmtab', state.tab === 'cmt'); updateTrayTitle(); document.body.classList.add('trayopen'); $('scrim').hidden = false; }
+function closeTray(){ document.body.classList.remove('trayopen'); if ($('panel').hidden && $('mkPanel').hidden && $('more').hidden) $('scrim').hidden = true; if (MOB && sel) { sel = null; document.querySelectorAll('.pg.sel').forEach(e => e.classList.remove('sel')); } }
+$('trayClose').onclick = closeTray;
+
+// 아래 4칸 메뉴 + 더보기 창
+$('tbEdit').onclick = () => { closeTray(); if (state.cmode) { leaveCmode(); } state.view = 'all'; state.finalOpen = false; state.mview = state.mview || 'page'; commit(); };
+$('tbFinal').onclick = () => { closeTray(); $('vFinal').click(); };
+$('tbCmt').onclick = () => { closeTray(); if (!state.cmode) setTab('cmt'); };
+$('tbMore').onclick = () => openMore();
+$('cList').onclick = () => { if (state.tab !== 'cmt') state.tab = 'cmt'; renderTray(); openTray(); };
+function renderMore(){
+  const st = $('mStatus'), txt = $('sharebar').querySelector('span')?.textContent || '';
+  st.hidden = !SH.main || !txt; st.textContent = txt;
+  $('miShare').disabled = !CM.canWrite || SH.busy; $('miBack').hidden = !(SH.main && state.source !== 'shared'); $('miHist').disabled = !CM.db;
+  $('miMk').disabled = !EMBED;
+}
+function openMore(){ renderMore(); $('scrim').hidden = false; $('more').hidden = false; }
+function closeMore(){ $('more').hidden = true; if ($('panel').hidden && $('mkPanel').hidden && !document.body.classList.contains('trayopen')) $('scrim').hidden = true; }
+$('miShare').onclick = () => { closeMore(); shareNow(); };
+$('miBack').onclick = () => { closeMore(); applyShared(); };
+$('miHist').onclick = () => { closeMore(); openHistory($('tbMore')); };
+$('miSet').onclick = () => { closeMore(); openSettings(); };
+$('miUp').onclick = () => { closeMore(); $('file').click(); };
+$('miMk').onclick = () => { closeMore(); openMk(); };
 
 commit();
 })();

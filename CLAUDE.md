@@ -59,6 +59,7 @@
 - 메뉴 「노트 제작」(`#notes`) → 노트 목록 → 노트를 열면 `public/notes/editor.html?book=<id>`가 iframe으로 열린다. 편집기는 한 파일짜리 순수 HTML/JS이고, 저장·로그인 확인은 **부모 화면이 대신**한다: iframe이 `postMessage`로 `{t:"note-rpc", op, args}`를 보내면 `notes-section.tsx`가 `notesApi`로 서버(`archive-notes`)에 전달하고 `{t:"note-rpc-res"}`로 돌려준다. 편집기 안에서는 `window.claude.use("db"|"user")` 모양의 어댑터(파일 앞쪽 `<script>`)가 이를 감싼다(원래 Claude 아티팩트 시안 코드를 그대로 쓰기 위해). 다른 사람의 코멘트·공유는 6초마다 다시 읽어 반영(실시간 아님).
 - 저장 위치(docs): `noteBooks`(`<노트>:main`=공유 구성, `<노트>:h:<id>`=이전 공유본 최근 20개) · `noteComments`(`<노트>:n:`=포스트잇·`:r:`=답글·`:s:`=스티커) · `noteImages`(`<노트>:<id>`=직원이 올려 공유한 이미지, 한 번 올리면 바뀌지 않음, 256KiB 이하 JPEG).
 - 권한(서버): 로그인한 승인 회원 전원이 읽기·작성·구성 공유 가능. 남의 코멘트는 '반영 완료' 표시만 바꿀 수 있고 지우기는 본인·관리자·제작실장만. 공유 구성(`:main`)·공유 이미지 삭제는 관리자·제작실장만. 작성자는 서버가 `createdById/Name/Campus`로 기록(화면 값은 믿지 않음).
+- 모바일(좁은 화면 ≤760px 또는 가로로 돌린 폰): `editor.html`의 `body.mob` 규칙이 처리. 아래 4칸 메뉴(편집·최종본·코멘트·더보기), 편집은 한 쪽씩 보기(`#pview`)+두 줄 모아보기(`#ovm`), 이미지 서랍은 아래 창, 세로 폰의 펼친 최종본은 한 쪽씩 읽기, 가로 폰은 기존 두 쪽 펼침. 데스크톱 화면은 그대로.
 - 알림(kind `notes`): 새 코멘트·구성 공유 → 관리자+제작실장, 내 코멘트에 답글·반영 완료 → 작성자. 알림 센터에 「노트 제작」 분류.
 - 이미지: `public/notes/<노트>/pNN.jpg`(로그인해야 보임 — `middleware.js` matcher에 `/notes/:path*`). **저장소가 공개라서 올리는 이미지는 광고용 시안뿐**이어야 한다.
 - 새 노트 추가: ① `notes-section.tsx`의 `BOOKS`에 항목 ② `public/notes/editor.html`의 `BOOKS`에 같은 id(제목·이미지 목록·기본 구성 `spring`) ③ 이미지를 `public/notes/<id>/`에. 이미지는 가로 1100px 안팎 JPEG로 줄여서(1장 200~350KB).
