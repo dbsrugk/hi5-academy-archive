@@ -48,7 +48,7 @@ h1{font-family:var(--f-display);font-size:22px;margin:0 6px 0 0;letter-spacing:-
 .nav .arrow:disabled{opacity:.35;cursor:default}
 .nav select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;font-size:13px;font-variant-numeric:tabular-nums;min-width:130px}
 .bookwrap{flex:1;min-height:0;width:100%;display:flex;justify-content:center;align-items:flex-start}
-.flipbox{position:relative;width:min(100%,calc((100vh - 390px) * var(--pr2)));min-width:min(100%,420px);aspect-ratio:var(--pr2);perspective:2400px;touch-action:none;user-select:none}
+.flipbox{position:relative;width:min(100%,calc((100vh - 390px) * var(--pr2)));min-width:min(100%,300px);aspect-ratio:var(--pr2);perspective:2400px;touch-action:none;user-select:none}
 .flipbox>.spread,.layer{position:absolute;inset:0;width:100%}
 .spread{position:relative;display:grid;grid-template-columns:1fr 1fr;aspect-ratio:var(--pr2);container-type:size}
 .spread.rings::after{content:"";position:absolute;left:50%;top:3%;bottom:3%;width:22px;transform:translateX(-50%);z-index:5;pointer-events:none;
@@ -363,6 +363,12 @@ button.upload{font:inherit;background:none;width:100%}
   transition:opacity .2s,transform .2s;max-width:calc(100% - 32px);pointer-events:none}
 .toast.on{opacity:1;transform:translate(-50%,0);pointer-events:auto}
 .toast button{border:0;background:none;color:var(--accent);font-weight:600;padding:0}
+/* 넓은 화면: 노트는 놓이는 칸의 실제 크기에 맞춘다 (펼친 최종본은 아래 종이 두께·그림자 자리를 따로 남김) */
+@media (min-width:861px){
+  .bookwrap{container-type:size;padding-bottom:10px;box-sizing:border-box}
+  .flipbox{width:min(100cqw,calc(100cqh * var(--pr2)));min-width:0}
+  .bookwrap.final{padding-bottom:56px}
+}
 @media (max-width:860px){
   .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto auto;grid-template-areas:"head" "stage" "tray";height:auto}
   .flipbox{width:100%}
