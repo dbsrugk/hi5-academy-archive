@@ -403,7 +403,12 @@ body.mob .bar .nav{display:none}
 body.mob .bar .pills{border:0;background:none;padding:0;gap:8px;flex-wrap:nowrap}
 body.mob .bar .pills button{height:36px;padding:0 14px;border-radius:18px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:13px;white-space:nowrap}
 body.mob .bar .pills button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600}
-body.mob .overview,body.mob .bookwrap{display:none}
+body.mob .overview{display:none}
+body.mob .bookwrap{display:none}
+body.mob.final-on .bookwrap:not([hidden]){display:flex;padding:0 0 10px;container-type:size}
+body.mob.final-on .flipbox{width:min(100cqw,calc(100cqh * var(--pr2)))}
+body.mob.final-on .bar{padding:8px 12px 0}
+body.mob.final-on .bar .nav{display:flex}
 body.mob .mobonly{display:inline-flex}
 body.mob .toast{bottom:calc(86px + env(safe-area-inset-bottom,0px))}
 /* 아래 4칸 메뉴 */
@@ -1091,7 +1096,7 @@ function renderBook(){
   const L = visibleItems();
   if (!L.length) { state.group = 'all'; toast('이 묶음은 지금 구성에 없어요.'); return renderBook(); }
   if (!L.some(it => it.id === state.cur)) state.cur = L[0].id;
-  const cm = !!state.cmode, mobEdit = MOB && state.view === 'all' && !cm, mobRead = MOB && !MOBL && state.view === 'final' && state.finalOpen && !cm;
+  const cm = !!state.cmode, mobEdit = MOB && state.view === 'all' && !cm, mobRead = false;
   const all = state.view === 'all' && !cm && !mobEdit, fin = state.view === 'final' && !cm, closed = fin && !state.finalOpen;
   $('cmode').hidden = !cm; $('bar').hidden = cm || closed || mobRead;
   $('final').hidden = !closed;
@@ -1236,7 +1241,7 @@ $('fBack').onclick = () => turnTo(152);
 $('fOpen').onclick = () => {
   // 뒤표지가 보이게 돌려 놓았으면 뒤에서부터 펼침
   const fromBack = Math.cos(FR.y * Math.PI / 180) < 0;
-  if (MOB && !MOBL) { const U = cUnits(); state.finalOpen = true; state.ppage = U[fromBack ? U.length - 1 : 0].id; sel = null; closePop(); commit(); return; }
+  if (false) { const U = cUnits(); state.finalOpen = true; state.ppage = U[fromBack ? U.length - 1 : 0].id; sel = null; closePop(); commit(); return; }
   state.finalOpen = true; state.group = 'all'; state.cur = B.items[fromBack ? B.items.length - 1 : 0].id; sel = null; closePop(); commit();
   setTimeout(() => flip(fromBack ? -1 : 1), 380);   // 표지가 넘어가며 열림
 };
