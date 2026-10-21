@@ -86,6 +86,8 @@ h1{font-family:var(--f-display);font-size:22px;margin:0 6px 0 0;letter-spacing:-
 .spread.blankblock .pg.L{box-shadow:var(--shadow),-3px 3px 0 -1px var(--paper),-3px 3px 0 0 var(--line),-6px 6px 0 -1px var(--paper),-6px 6px 0 0 var(--line)}
 .blabel{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;background:var(--ink);color:var(--bg);border-radius:12px;padding:8px 14px;text-align:center;font-size:13px;line-height:1.35;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.2);white-space:nowrap}
 .blabel b{font-family:var(--f-display);font-size:18px;display:block}
+.bl-hint{display:none;font-size:11.5px;opacity:.85}
+body.final-on .bl-hint{display:inline}
 .pg.sel{box-shadow:var(--shadow),inset 0 0 0 3px var(--accent)}
 .pg.sel .empty{border-color:var(--accent);color:var(--accent)}
 .pg.hot{transform:scale(1.015);box-shadow:var(--shadow),inset 0 0 0 3px var(--accent)}
@@ -816,7 +818,7 @@ function buildItem(it, interactive){
     wrap.classList.add('blankblock', 'rings');
     wrap.appendChild(blankPage('L', '백지')); wrap.appendChild(blankPage('R', '백지'));
     const lb = document.createElement('div'); lb.className = 'blabel';
-    lb.innerHTML = `<b>백지 ${it.from}–${it.to}쪽</b>필기용 ${it.to - it.from + 1}쪽`;
+    lb.innerHTML = `<b>백지 ${it.from}–${it.to}쪽</b>필기용 ${it.to - it.from + 1}쪽<span class="bl-hint"><br>누르거나 끌면 한 번에 넘어가요</span>`;
     wrap.appendChild(lb);
   } else {
     const {l, r} = it;
@@ -1308,16 +1310,20 @@ function finishFlip(to, cb){
   requestAnimationFrame(step);
 }
 /* 백지 건너뛰기: 백지를 누르면 여러 장이 샤라락 넘어가며 백지 묶음의 끝(또는 처음)으로 */
-function blankJump(dir){
+// 지금 보는 펼침면이 백지 묶음이거나, 넘기는 쪽이 백지일 때만 부채 효과를 쓴다 (내용 페이지는 한 장씩)
+function blankSideOf(dir){ const L = visibleItems(), here = L[curIndex()]; return !!here && (here.type === 'blank' || (dir > 0 ? here.r : here.l)?.kind === 'blank'); }
+function blankJump(dir, dry){
   if (fl || !B.K) return false;
   const L = visibleItems(), i = curIndex();
   if (L[i] && L[i].type === 'blank') {   // 백지 묶음 위에서 넘기면 → 백지 전체를 부채처럼 넘겨 옆 펼침면으로
     const k = i + dir; if (k < 0 || k >= L.length) return false;
+    if (dry) return true;
     riffle(dir, k, B.K); return true;
   }
   const has = (it, key) => it.type === 'blank' ? it.pages.some(p => p.key === key) : [it.l, it.r].some(p => p && p.key === key);
   const j = L.findIndex(it => has(it, dir > 0 ? 'b' + B.K : 'b1'));
   if (j < 0 || (dir > 0 ? j <= i + 1 : j >= i - 1)) return false;   // 한 장 차이면 그냥 한 장 넘김
+  if (dry) return true;
   riffle(dir, j, B.K);
   return true;
 }
@@ -1389,6 +1395,7 @@ fb.addEventListener('pointermove', e => {
   if (!gest.active) {
     if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy)) return;
     gest.dir = dx < 0 ? 1 : -1;
+    if (B.K && blankSideOf(gest.dir) && blankJump(gest.dir, true)) { gest.fan = true; gest.active = true; fb.classList.add('grab'); return; }   // 백지 위에서 끌면 놓을 때 부채처럼 넘어감
     if (!startFlip(gest.dir)) { gest.blocked = true; }
     gest.active = true; fb.classList.add('grab');
   }
@@ -1408,6 +1415,7 @@ const endGest = e => {
     }
     if (g.slot) toggleSel(g.slot); return;
   }
+  if (g.fan) { if (Math.abs(e.clientX - g.x0) > 30) blankJump(g.dir); return; }
   if (g.blocked) {
     toast(g.dir > 0 ? '마지막 장이에요.' : '첫 장이에요.');
     return;
