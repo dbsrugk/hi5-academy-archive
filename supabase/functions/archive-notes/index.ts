@@ -19,7 +19,7 @@ const slot = (minutes: number) => Math.floor(Date.now() / (minutes * 60_000));
 const isProducer = (t: string) => t === "제작실장";
 // 「이 구성으로 저장하기」(noteBooks의 <노트>:main · <노트>:h:…): 관리자·제작실장 + 노트별로 지정한 캠퍼스의 원장.
 // 새 노트를 추가하면 여기에도 한 줄 추가 (public/notes/editor.html 의 BOOKS.savers 와 같게).
-const SAVERS: Record<string, string[]> = { "spring-mid": ["센텀"], "spring-elem": ["센텀"], "spring-myeongji": ["명지"] };
+const SAVERS: Record<string, string[]> = { "spring-mid": ["센텀"], "spring-elem": ["센텀"], "summer-mj-elem": ["명지"], "summer-mj-mid": ["명지"] };
 const canSaveBook = (me: Member, id: string) => me.is_admin || isProducer(me.title) || (me.title === "원장" && (SAVERS[id.split(":")[0]] ?? []).includes(me.campus));
 
 // 노트 컬렉션: noteBooks(구성·공유 기록) · noteComments(포스트잇·답글·스티커) · noteImages(공유 이미지, 한 장씩 읽기만)

@@ -15,7 +15,8 @@ import { useBackClose } from "@/hooks/use-back-close";
 const BOOKS = [
   { id: "spring-mid", title: "2026 봄노트 · 센텀 중고등", subtitle: "표지 2장 · 속지 18장 · 단면", cover: "/notes/spring-mid/p01.jpg" },
   { id: "spring-elem", title: "2026 봄노트 · 센텀 초등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/spring-elem/p01.jpg" },
-  { id: "spring-myeongji", title: "2026 봄노트 · 명지", subtitle: "빈 노트 · 이미지는 올려서 채워요", cover: "" },
+  { id: "summer-mj-elem", title: "2026 여름노트 · 명지 초등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/summer-mj-elem/p01.jpg" },
+  { id: "summer-mj-mid", title: "2026 여름노트 · 명지 중고등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/summer-mj-mid/p01.jpg" },
 ];
 const OPEN_KEY = "hi5-notes-open";
 

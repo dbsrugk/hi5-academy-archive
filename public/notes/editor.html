@@ -918,12 +918,23 @@ const BOOKS = {
       fill:{front:'se01', fcin:'se03', f1:'se04', f2:'se05', f3:'se06', f4:'se07', f5:'se08', f6:'se09', f7:'se10', f8:'se11',
             r1:'se12', r2:'se13', r3:'se14', r4:'se15', bcin:'se16', back:'se02'}}
   },
-  'spring-myeongji': {
-    title: '2026 봄노트 · 명지',
-    base: '/notes/spring-myeongji/',
+  'summer-mj-elem': {
+    title: '2026 여름노트 · 명지 초등',
+    base: '/notes/summer-mj-elem/',
     savers: ['명지'],
-    preset: [],   // 이미지는 아직 없음 — 서랍에서 올리거나 마케팅 제작물에서 불러오면 됨
-    spring: {mode:'single', ratio:R_SPRING, frontCount:9, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined', fill:{}}
+    preset: [{"id": "sa01", "cat": "cover", "name": "앞표지 · Lovely Summer", "file": "p01.jpg"}, {"id": "sa02", "cat": "cover", "name": "뒤표지 · 명지 하이파이브", "file": "p02.jpg"}, {"id": "sa03", "cat": "inner", "name": "여름특강 & 우수특강", "file": "p03.jpg"}, {"id": "sa04", "cat": "inner", "name": "하이파이브 미술학원 · 시설", "file": "p04.jpg"}, {"id": "sa05", "cat": "inner", "name": "수상결과", "file": "p05.jpg"}, {"id": "sa06", "cat": "inner", "name": "상명대 금상·동상", "file": "p06.jpg"}, {"id": "sa07", "cat": "inner", "name": "TWIN CLASS 융합 커리큘럼", "file": "p07.jpg"}, {"id": "sa08", "cat": "inner", "name": "융합 커리큘럼 · 초중등 과정", "file": "p08.jpg"}, {"id": "sa09", "cat": "inner", "name": "디자인&캐릭터", "file": "p09.jpg"}, {"id": "sa10", "cat": "inner", "name": "기초드로잉&인체드로잉", "file": "p10.jpg"}, {"id": "sa11", "cat": "inner", "name": "일러스트레이션", "file": "p11.jpg"}, {"id": "sa12", "cat": "inner", "name": "전국 57개 캠퍼스", "file": "p12.jpg"}, {"id": "sa13", "cat": "inner", "name": "하이파이브 미술학원 · 시설", "file": "p13.jpg"}, {"id": "sa14", "cat": "inner", "name": "트윈클래스", "file": "p14.jpg"}, {"id": "sa15", "cat": "inner", "name": "만화&웹툰", "file": "p15.jpg"}, {"id": "sa16", "cat": "inner", "name": "와콤 신티크 CLASS", "file": "p16.jpg"}],
+    spring: {mode:'single', ratio:R_SPRING, frontCount:8, backCount:4, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'sa01', fcin:'sa03', f1:'sa04', f2:'sa05', f3:'sa06', f4:'sa07', f5:'sa08', f6:'sa09', f7:'sa10', f8:'sa11',
+            r1:'sa12', r2:'sa13', r3:'sa14', r4:'sa15', bcin:'sa16', back:'sa02'}}
+  },
+  'summer-mj-mid': {
+    title: '2026 여름노트 · 명지 중고등',
+    base: '/notes/summer-mj-mid/',
+    savers: ['명지'],
+    preset: [{"id": "sb01", "cat": "cover", "name": "앞표지 · HiFive AniHi", "file": "p01.jpg"}, {"id": "sb02", "cat": "cover", "name": "뒤표지 · 명지", "file": "p02.jpg"}, {"id": "sb03", "cat": "inner", "name": "여름특강 & 우수특강", "file": "p03.jpg"}, {"id": "sb04", "cat": "inner", "name": "하이파이브 미술학원 · 시설", "file": "p04.jpg"}, {"id": "sb05", "cat": "inner", "name": "대상 8관왕 · 금상 19관왕", "file": "p05.jpg"}, {"id": "sb06", "cat": "inner", "name": "상명대 금상·동상", "file": "p06.jpg"}, {"id": "sb07", "cat": "inner", "name": "최상위권 미대입시 1", "file": "p07.jpg"}, {"id": "sb08", "cat": "inner", "name": "최상위권 미대입시 2", "file": "p08.jpg"}, {"id": "sb09", "cat": "inner", "name": "기초디자인", "file": "p09.jpg"}, {"id": "sb10", "cat": "inner", "name": "연출형 기초디자인", "file": "p10.jpg"}, {"id": "sb11", "cat": "inner", "name": "디자인 관련 학과 소개", "file": "p11.jpg"}, {"id": "sb12", "cat": "inner", "name": "전국 57개 캠퍼스", "file": "p12.jpg"}, {"id": "sb13", "cat": "inner", "name": "하이파이브 미술학원 · 시설", "file": "p13.jpg"}, {"id": "sb14", "cat": "inner", "name": "만화·애니 미대입시", "file": "p14.jpg"}, {"id": "sb15", "cat": "inner", "name": "포트폴리오 · 신티크", "file": "p15.jpg"}, {"id": "sb16", "cat": "inner", "name": "만화·애니 관련 학과 소개", "file": "p16.jpg"}],
+    spring: {mode:'single', ratio:R_SPRING, frontCount:8, backCount:4, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'sb01', fcin:'sb03', f1:'sb04', f2:'sb05', f3:'sb06', f4:'sb07', f5:'sb08', f6:'sb09', f7:'sb10', f8:'sb11',
+            r1:'sb12', r2:'sb13', r3:'sb14', r4:'sb15', bcin:'sb16', back:'sb02'}}
   }
 };
 const BOOK = BOOKS[BOOK_ID] || BOOKS['spring-mid'];
@@ -1358,7 +1369,7 @@ function renderTray(){
     items.forEach(im => gridEl.appendChild(tile(im)));
   };
   const pre = list.filter(i => i.preset); list = list.filter(i => !i.preset);
-  if (pre.length) section(state.tab === 'cover' ? `샘플 · ${BOOK.title.replace(/^.*센텀 /, '봄노트 ')} 표지 ${pre.length}장` : `샘플 · ${BOOK.title.replace(/^.*센텀 /, '봄노트 ')} 속지 ${pre.length}장 (펼침 순서)`, pre);
+  if (pre.length) section(state.tab === 'cover' ? `샘플 · ${BOOK.title.replace(/^2026 /, '')} 표지 ${pre.length}장` : `샘플 · ${BOOK.title.replace(/^2026 /, '')} 속지 ${pre.length}장 (펼침 순서)`, pre);
   if (state.tab === 'cover') section('앞표지 · 뒤표지 (단면)', list);
   else {
     const wide = list.filter(i => i.wide), single = list.filter(i => !i.wide);
