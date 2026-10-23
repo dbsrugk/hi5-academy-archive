@@ -19,7 +19,7 @@ const slot = (minutes: number) => Math.floor(Date.now() / (minutes * 60_000));
 const isProducer = (t: string) => t === "제작실장";
 // 「이 구성으로 저장하기」(noteBooks의 <노트>:main · <노트>:h:…): 관리자·제작실장 + 노트별로 지정한 캠퍼스의 원장.
 // 새 노트를 추가하면 여기에도 한 줄 추가 (public/notes/editor.html 의 BOOKS.savers 와 같게).
-const SAVERS: Record<string, string[]> = { "spring-mid": ["센텀"], "spring-elem": ["센텀"] };
+const SAVERS: Record<string, string[]> = { "spring-mid": ["센텀"], "spring-elem": ["센텀"], "spring-myeongji": ["명지"] };
 const canSaveBook = (me: Member, id: string) => me.is_admin || isProducer(me.title) || (me.title === "원장" && (SAVERS[id.split(":")[0]] ?? []).includes(me.campus));
 
 // 노트 컬렉션: noteBooks(구성·공유 기록) · noteComments(포스트잇·답글·스티커) · noteImages(공유 이미지, 한 장씩 읽기만)
@@ -147,7 +147,7 @@ async function write(op: string, body: Json, me: Member) {
   const collection = String(body.collection ?? ""), id = String(body.id ?? "");
   if (!COLLECTIONS.has(collection) || !ID_RE.test(id)) return json({ error: "잘못된 요청입니다." }, 400);
   const manager = me.is_admin || isProducer(me.title);
-  if (collection === "noteBooks" && !canSaveBook(me, id)) return json({ error: "이 노트의 구성 저장은 관리자·제작실장·지정된 캠퍼스 원장만 할 수 있어요." }, 403);
+  if (collection === "noteBooks" && !canSaveBook(me, id)) return json({ error: "권한이 없습니다." }, 403);
   const { data: row, error: readError } = await supabase.from("docs").select("data").eq("collection", collection).eq("id", id).maybeSingle();
   if (readError) throw readError;
   const existing = (row?.data ?? null) as Json | null;

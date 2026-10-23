@@ -917,6 +917,13 @@ const BOOKS = {
     spring: {mode:'single', ratio:R_SPRING, frontCount:8, backCount:4, linkBack:false, blankCount:18, blankStyle:'lined',
       fill:{front:'se01', fcin:'se03', f1:'se04', f2:'se05', f3:'se06', f4:'se07', f5:'se08', f6:'se09', f7:'se10', f8:'se11',
             r1:'se12', r2:'se13', r3:'se14', r4:'se15', bcin:'se16', back:'se02'}}
+  },
+  'spring-myeongji': {
+    title: '2026 봄노트 · 명지',
+    base: '/notes/spring-myeongji/',
+    savers: ['명지'],
+    preset: [],   // 이미지는 아직 없음 — 서랍에서 올리거나 마케팅 제작물에서 불러오면 됨
+    spring: {mode:'single', ratio:R_SPRING, frontCount:9, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined', fill:{}}
   }
 };
 const BOOK = BOOKS[BOOK_ID] || BOOKS['spring-mid'];
@@ -2125,7 +2132,7 @@ function renderShareBar(){
   const sb = $('shareBtn'), bar = $('sharebar');
   sb.disabled = !CM.canSave || SH.busy;
   sb.textContent = SH.busy ? '저장하는 중…' : '↗ 이 구성으로 저장하기';
-  sb.title = !CM.db ? '로그인한 멤버만 저장할 수 있어요.' : !CM.canSave ? '이 노트의 구성 저장은 관리자·제작실장·' + (BOOK.savers || []).join('·') + ' 원장만 할 수 있어요.' : '지금 설정과 이미지 배치를 링크를 여는 사람들에게 보여줘요.';
+  sb.title = !CM.db ? '로그인한 멤버만 저장할 수 있어요.' : !CM.canSave ? '권한이 없습니다.' : '지금 설정과 이미지 배치를 링크를 여는 사람들에게 보여줘요.';
   if (!SH.main || state.cmode) { bar.hidden = true; return; }
   bar.hidden = false; bar.innerHTML = '';
   const mineBy = SH.main.by === CM.uid, when = SH.main.at ? ago(SH.main.at) : '';
@@ -2155,7 +2162,7 @@ async function toShareSrc(src){
   return null;
 }
 const shareErr = e => e && e.code === 'quota_exceeded' ? '저장 공간이 가득 찼어요. 오래된 코멘트나 이미지를 줄여주세요.' :
-  e && e.code === 'invalid_argument' ? '이 노트는 저장 권한이 있는 사람만 저장할 수 있어요.' : '저장하지 못했어요. 잠시 후 다시 해주세요.';
+  e && e.code === 'invalid_argument' ? '권한이 없습니다.' : '저장하지 못했어요. 잠시 후 다시 해주세요.';
 async function writeShared(layout, imgs, extra = {}){
   const db = CM.db, now = Date.now();
   const cur = await db.doc('book/main').get();
@@ -2227,7 +2234,7 @@ function renderHist(){
     if (CM.canSave) { const go = document.createElement('button'); go.className = 'btn small'; go.textContent = '되돌리기'; go.onclick = () => restoreShared(h); row.appendChild(go); }
     pop.appendChild(row);
   });
-  if (!CM.canSave) { const e = document.createElement('div'); e.className = 'who-list'; e.textContent = '되돌리기는 저장 권한이 있는 사람만 할 수 있어요.'; pop.appendChild(e); }
+  if (!CM.canSave) { const e = document.createElement('div'); e.className = 'who-list'; e.textContent = '권한이 없습니다.'; pop.appendChild(e); }
 }
 async function restoreShared(h){
   if (!CM.canSave || SH.busy) return;

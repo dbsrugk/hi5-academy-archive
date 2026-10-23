@@ -16,7 +16,7 @@
 - 화면: Vite + React 19 + Tailwind 4 + shadcn. `src/archive-api.ts`가 `/api/*` fetch를 가로채 edge function `call(path, body)`로 보냄.
 - 서버: Supabase 프로젝트 `xflelzgpwgavtwixiolg`(무료 플랜), edge function **`archive-api` (현재 v16, verify_jwt=false)**.
   - 배포: `mcp__Supabase__deploy_edge_function`에 `supabase/functions/archive-api/index.ts` **전체 내용**을 넣어 배포. 저장소 파일 = 배포본이 되도록 유지.
-- 서버 함수 **`archive-notes`**(v2, verify_jwt=false): 「노트 제작」 전용. archive-api와 같은 토큰(`x-archive-token`)·회원 확인을 쓰고 `docs`의 `noteBooks`·`noteComments`·`noteImages`만 다룬다. archive-api를 건드리지 않으려고 따로 둠(6만 자 통째 재배포 위험 회피). 배포 방법은 위와 같고 파일은 `supabase/functions/archive-notes/index.ts`.
+- 서버 함수 **`archive-notes`**(v3, verify_jwt=false): 「노트 제작」 전용. archive-api와 같은 토큰(`x-archive-token`)·회원 확인을 쓰고 `docs`의 `noteBooks`·`noteComments`·`noteImages`만 다룬다. archive-api를 건드리지 않으려고 따로 둠(6만 자 통째 재배포 위험 회피). 배포 방법은 위와 같고 파일은 `supabase/functions/archive-notes/index.ts`.
 - DB: `docs(collection, id, data jsonb)`. 컬렉션: events, marketing, meetings, promotions, productionRequests, productionSchedules, productionPriority, compliance*, nationalNews, **inbox** 등.
 - 정적 이미지: `public/marketing/*.webp`(미리보기) + `public/marketing/orig/…`(다운로드용 원본, 갤러리 항목의 `original`), `public/events/...` → 로그인 안 하면 `middleware.js`가 막음. 갤러리 이미지는 `./marketing/파일.webp` 형식으로 data에 넣음.
 
@@ -63,7 +63,7 @@
 - 크게 보기: ① 전체보기 카드의 「🔍 크게」(또는 그림 누르기) → 큰 보기 창(‹ ›·밀기·Esc·아무 곳이나 한 번 더 누르면 닫힘) ② 최종본 펼침의 「⛶ 크게」→ 전체 화면(탭하면 닫힘, 넘기기는 끌기·←→ 키)(부모 iframe에 `allow="fullscreen"` 필요). 세로 폰은 화면을 90° 돌려 노트를 크게 쓰고(`body.big.rot`, 끌기 좌표 `GX/GY`로 변환), 가로 폰·데스크톱은 전체 화면.
 - 스프링(링) 표현은 제거함(제본이 스프링이 아님). 최종본 펼침은 두 손가락 벌리기(PC는 Ctrl+휠)로 최대 4배 확대, 확대 중에도 한 손가락 끌기는 페이지 넘기기·두 손가락은 이동, 두 번 탭하면 원래대로(닫힌 3D 노트 표지도 동일하되, 확대 중에도 한 손가락은 노트 돌리기·두 손가락은 이동).
 - 등록된 노트: `spring-mid`(봄노트 센텀 중고등·20장) · `spring-elem`(봄노트 센텀 초등·16장, 이미지 `public/notes/spring-elem/`, 프리셋 id `se01~se16`, 앞 속지 8·뒤 속지 4·백지 18). 원본은 `D:\바탕화면\학원\제작_노트#.26 봄노트_센텀\초등`. 초등은 앞 속지가 홀수쪽이라 뒤 속지가 `백지|뒤1`로 시작(뒤표지 정렬 때문에 백지 쪽수가 짝수로 맞춰짐).
-- **「이 구성으로 저장하기」(전엔 '구성 공유하기') 권한**: 관리자·제작실장은 모든 노트, 캠퍼스 원장은 노트에 지정된 캠퍼스만(지금 두 노트 모두 `센텀`). 새 노트·캠퍼스를 추가하면 서버 `archive-notes/index.ts`의 `SAVERS`와 `editor.html` `BOOKS.savers`를 같게 고치고 서버를 재배포. 서버가 noteBooks 쓰기(구성·이전 저장본·되돌리기) 전부를 이 규칙으로 막고, 화면은 같은 규칙으로 버튼을 끔. 코멘트·스티커는 지금처럼 로그인 멤버 모두.
+- **「이 구성으로 저장하기」(전엔 '구성 공유하기') 권한**: 관리자·제작실장은 모든 노트, 캠퍼스 원장은 노트에 지정된 캠퍼스만(중고등·초등=`센텀`, 명지 노트(`spring-myeongji`, 빈 노트·이미지 없음)=`명지`). 새 노트·캠퍼스를 추가하면 서버 `archive-notes/index.ts`의 `SAVERS`와 `editor.html` `BOOKS.savers`를 같게 고치고 서버를 재배포. 서버가 noteBooks 쓰기(구성·이전 저장본·되돌리기) 전부를 이 규칙으로 막고, 화면은 같은 규칙으로 버튼을 끔. 코멘트·스티커는 지금처럼 로그인 멤버 모두.
 - 알림(kind `notes`): 새 코멘트·구성 공유 → 관리자+제작실장, 내 코멘트에 답글·반영 완료 → 작성자. 알림 센터에 「노트 제작」 분류.
 - 이미지: `public/notes/<노트>/pNN.jpg`(로그인해야 보임 — `middleware.js` matcher에 `/notes/:path*`). **저장소가 공개라서 올리는 이미지는 광고용 시안뿐**이어야 한다.
 - 새 노트 추가: ① `notes-section.tsx`의 `BOOKS`에 항목 ② `public/notes/editor.html`의 `BOOKS`에 같은 id(제목·이미지 목록·기본 구성 `spring`) ③ 이미지를 `public/notes/<id>/`에. 이미지는 가로 1100px 안팎 JPEG로 줄여서(1장 200~350KB).
