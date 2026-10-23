@@ -112,7 +112,8 @@ body.final-on .bl-hint{display:inline}
 .final{flex:1;min-height:0;width:100%;display:flex;flex-direction:column;align-items:center;gap:12px}
 .fscene{flex:1;min-height:260px;width:100%;position:relative;display:grid;place-items:center;perspective:1600px;touch-action:none;cursor:grab;user-select:none}
 .fscene.drag{cursor:grabbing}
-.book3d{position:relative;width:var(--W);height:var(--H);transform-style:preserve-3d;transform:rotateX(var(--ax)) rotateY(var(--ay));z-index:1}
+.book3d{position:relative;width:var(--W);height:var(--H);transform-style:preserve-3d;transform:translate(var(--zx,0px),var(--zy,0px)) scale(var(--zs,1)) rotateX(var(--ax)) rotateY(var(--ay));z-index:1}
+.fscene.zoomed{overflow:hidden}
 .book3d.anim{transition:transform .9s cubic-bezier(.3,.8,.3,1)}
 .f3{position:absolute;backface-visibility:hidden;-webkit-backface-visibility:hidden}
 .f3.front,.f3.back{inset:0;overflow:hidden;background:var(--cover)}
@@ -1281,6 +1282,7 @@ const turnTo = y => { const k = Math.round((FR.y - y) / 360); FR.y = y + k * 360
 $('fFront').onclick = () => turnTo(-28);
 $('fBack').onclick = () => turnTo(152);
 $('fOpen').onclick = () => {
+  if (typeof sreset === 'function') sreset();
   // 뒤표지가 보이게 돌려 놓았으면 뒤에서부터 펼침
   const fromBack = Math.cos(FR.y * Math.PI / 180) < 0;
   if (false) { const U = cUnits(); state.finalOpen = true; state.ppage = U[fromBack ? U.length - 1 : 0].id; sel = null; closePop(); commit(); return; }
@@ -2529,7 +2531,7 @@ let ZS = 1, ZX = 0, ZY = 0;
 const zp = new Map(); let zg = null, zLast = 0;
 function zapply(){ fb.style.transformOrigin = '50% 50%'; fb.style.transform = ZS > 1.001 ? `translate(${ZX}px,${ZY}px) scale(${ZS})` : ''; }
 function zclamp(){ const mx = fb.offsetWidth * (ZS - 1) / 2, my = fb.offsetHeight * (ZS - 1) / 2; ZX = Math.max(-mx, Math.min(mx, ZX)); ZY = Math.max(-my, Math.min(my, ZY)); }
-function zreset(){ ZS = 1; ZX = 0; ZY = 0; zp.clear(); zg = null; zapply(); }
+function zreset(){ if (typeof sreset === 'function') sreset(); ZS = 1; ZX = 0; ZY = 0; zp.clear(); zg = null; zapply(); }
 const zloc = (dx, dy) => ROT() ? [dy, -dx] : [dx, dy];   // 화면 이동량 → 노트 안쪽 좌표 (세로 폰 돌림 보정)
 const zdist = () => { const [a, b] = [...zp.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
 const zmid = () => { const [a, b] = [...zp.values()]; return {x:(a.x + b.x) / 2, y:(a.y + b.y) / 2}; };
@@ -2557,6 +2559,31 @@ fb.addEventListener('pointermove', e => {
 const zup = e => { if (!zp.has(e.pointerId)) return; zp.delete(e.pointerId); if (zg && zp.size < 2) { const wasPinch = zg.pinch; zg = null; if (ZS < 1.05) zreset(); if (wasPinch) zLast = 0; } };
 fb.addEventListener('pointerup', zup, true); fb.addEventListener('pointercancel', zup, true);
 $('bookwrap').addEventListener('wheel', e => { if (!e.ctrlKey || state.view !== 'final' || !state.finalOpen) return; e.preventDefault(); ZS = Math.max(1, Math.min(4, ZS * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); if (ZS < 1.02) ZS = 1; zclamp(); zapply(); }, {passive:false});
+
+/* 닫힌 3D 노트도 손가락 확대 (두 손가락 · Ctrl+휠 · 확대 중 한 손가락 이동 · 두 번 탭 해제) */
+let SS = 1, SX = 0, SY = 0; const sp = new Map(); let sg = null, sLast = 0;
+const sc3 = $('fscene');
+function sapply(){ sc3.style.setProperty('--zs', SS); sc3.style.setProperty('--zx', SX + 'px'); sc3.style.setProperty('--zy', SY + 'px'); sc3.classList.toggle('zoomed', SS > 1.001); }
+function sclamp(){ const mx = sc3.clientWidth * (SS - 1) / 2, my = sc3.clientHeight * (SS - 1) / 2; SX = Math.max(-mx, Math.min(mx, SX)); SY = Math.max(-my, Math.min(my, SY)); }
+function sreset(){ SS = 1; SX = 0; SY = 0; sp.clear(); sg = null; sapply(); }
+const sdist = () => { const [a, b] = [...sp.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+const smid = () => { const [a, b] = [...sp.values()]; return {x:(a.x + b.x) / 2, y:(a.y + b.y) / 2}; };
+sc3.addEventListener('pointerdown', e => {
+  sp.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (sp.size === 2) { const m = smid(); sg = {pinch:true, d0:sdist(), s0:SS, mx:m.x, my:m.y, zx:SX, zy:SY}; e.stopImmediatePropagation(); e.preventDefault(); }
+  else if (SS > 1.001) {
+    const now = performance.now(); if (now - sLast < 320) { sreset(); sLast = 0; e.stopImmediatePropagation(); return; } sLast = now;
+    sg = {pan:true, x:e.clientX, y:e.clientY, zx:SX, zy:SY}; e.stopImmediatePropagation(); try { sc3.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+}, true);
+sc3.addEventListener('pointermove', e => {
+  if (!sp.has(e.pointerId)) return; sp.set(e.pointerId, {x:e.clientX, y:e.clientY}); if (!sg) return;
+  if (sg.pinch && sp.size >= 2) { SS = Math.max(1, Math.min(4, sg.s0 * sdist() / sg.d0)); const m = smid(); SX = sg.zx + (m.x - sg.mx); SY = sg.zy + (m.y - sg.my); sclamp(); sapply(); e.stopImmediatePropagation(); }
+  else if (sg.pan) { SX = sg.zx + (e.clientX - sg.x); SY = sg.zy + (e.clientY - sg.y); sclamp(); sapply(); e.stopImmediatePropagation(); }
+}, true);
+const sup = e => { if (!sp.has(e.pointerId)) return; sp.delete(e.pointerId); if (sg && sp.size < 2) { sg = null; if (SS < 1.05) sreset(); } };
+sc3.addEventListener('pointerup', sup, true); sc3.addEventListener('pointercancel', sup, true);
+sc3.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); SS = Math.max(1, Math.min(4, SS * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); if (SS < 1.02) SS = 1; sclamp(); sapply(); }, {passive:false});
 
 /* ── 모바일 화면 (좁은 화면 · 가로로 돌린 폰) ──────────────────────────
    body.mob 일 때만: 한 쪽씩 보기(pview) · 두 줄 모아보기(ovm) · 아래 4칸 메뉴 · 이미지 서랍은 아래 창 · 더보기 창.
