@@ -134,7 +134,7 @@ export function NotesSection({ demoMode }: { role: "staff" | "admin"; demoMode: 
       </div>
       <div className="grid gap-3 rounded-2xl border border-dashed p-4 text-sm text-muted-foreground sm:grid-cols-2">
         <p className="flex gap-2"><MessageSquare className="mt-0.5 size-4 shrink-0 text-primary" />페이지를 크게 열어 포스트잇·스티커·손그림으로 의견을 남기면 제작실에 알림이 가요.</p>
-        <p className="flex gap-2"><Share2 className="mt-0.5 size-4 shrink-0 text-primary" />「이 구성 공유하기」를 누르면 모든 직원이 같은 구성을 봐요. 이전 공유본으로 되돌릴 수도 있어요.</p>
+        <p className="flex gap-2"><Share2 className="mt-0.5 size-4 shrink-0 text-primary" />「이 구성으로 저장하기」를 누르면 이 노트를 여는 모든 직원이 같은 구성을 봐요(관리자·제작실장과 노트에 지정된 캠퍼스 원장만). 이전 저장본으로 되돌릴 수도 있어요.</p>
       </div>
     </div>
   );

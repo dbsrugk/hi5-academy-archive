@@ -177,7 +177,7 @@ body.final-on .pg .tag,body.final-on .pg .empty,body.final-on .pg .x{display:non
 .overview .blabel b{font-size:13px}
 .overview .spread.rings::after{width:14px;background-size:14px 14px;background-image:radial-gradient(ellipse 6px 2.5px at 7px 50%,transparent 2px,var(--ring) 2.5px,var(--ring) 3.5px,transparent 4px)}
 
-/* 공유 구성 안내 줄 */
+/* 저장된 구성 안내 줄 */
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .sharebar{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px 10px;font-size:13px}
 .sharebar b{font-weight:600}
@@ -575,7 +575,7 @@ body.big.rot .bar{display:none}
       <button id="vAll" aria-pressed="false">전체 보기</button>
       <button id="vFinal" aria-pressed="false">최종본 보기</button>
     </div>
-    <button class="btn" id="shareBtn" disabled>↗ 이 구성 공유하기</button>
+    <button class="btn" id="shareBtn" disabled>↗ 이 구성으로 저장하기</button>
     <button class="btn" id="openSettings">⚙ 페이지 설정</button>
   </header>
 
@@ -665,9 +665,9 @@ body.big.rot .bar{display:none}
 <div class="sheet" id="more" role="dialog" aria-modal="true" aria-label="더보기" hidden>
   <div class="sheethd"><div class="grab"></div></div>
   <div class="mstatus" id="mStatus" hidden></div>
-  <button class="mi primary" id="miShare"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 14v5a1 1 0 001 1h12a1 1 0 001-1v-5"/></svg></span><span class="tx">이 구성 공유하기<small>모든 직원이 같은 구성을 봐요</small></span></button>
-  <button class="mi" id="miBack" hidden><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></span><span class="tx">공유 구성으로 돌아가기</span></button>
-  <button class="mi" id="miHist"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 108-8 8 8 0 00-6 2.7M4 4v4h4M12 8v4l3 2"/></svg></span><span class="tx">이전 공유본 보기 · 되돌리기</span></button>
+  <button class="mi primary" id="miShare"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 14v5a1 1 0 001 1h12a1 1 0 001-1v-5"/></svg></span><span class="tx">이 구성으로 저장하기<small>이 노트를 여는 모두가 같은 구성을 봐요</small></span></button>
+  <button class="mi" id="miBack" hidden><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></span><span class="tx">저장된 구성으로 돌아가기</span></button>
+  <button class="mi" id="miHist"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 108-8 8 8 0 00-6 2.7M4 4v4h4M12 8v4l3 2"/></svg></span><span class="tx">이전 저장본 보기 · 되돌리기</span></button>
   <button class="mi" id="miSet"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></span><span class="tx">페이지 설정<small>쪽수 · 단면/양면 · 백지 · 페이지 크기</small></span></button>
   <div class="msep"></div>
   <button class="mi" id="miUp"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M4 17v3h16v-3"/></svg></span><span class="tx">내 이미지 올리기</span></button>
@@ -728,7 +728,7 @@ body.big.rot .bar{display:none}
 /* 사이트 연결 — 이 페이지는 학원 아카이브 안에 iframe으로 열린다.
    서버 호출·로그인 확인은 부모 화면(src/components/archive/notes-section.tsx)이 맡고, 여기서는 메시지(postMessage)로 부탁한다.
    편집기 코드는 Firestore와 비슷한 db / user 모양을 기대하므로 같은 모양으로 감싼다.
-   저장 위치: noteBooks(구성·공유 기록·이전 공유본) · noteComments(포스트잇·답글·스티커) · noteImages(공유 이미지) */
+   저장 위치: noteBooks(구성·공유 기록·이전 저장본) · noteComments(포스트잇·답글·스티커) · noteImages(공유 이미지) */
 (() => {
   const BOOK = new URLSearchParams(location.search).get('book') || 'spring-mid';
   const EMBED = window.parent !== window;
@@ -862,7 +862,9 @@ body.big.rot .bar{display:none}
   const avatar = (label, color) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><circle cx="20" cy="20" r="20" fill="${color}"/><text x="20" y="26" text-anchor="middle" font-size="18" font-weight="700" fill="#fff" font-family="sans-serif">${(label || '?').slice(0, 1)}</text></svg>`);
   const USER = {
     id: async () => (await ready).me ? (await ready).me.id : null,
-    can: async n => n === 'data.write' ? !!(await ready).canWrite : null,
+    can: async n => { const i = await ready; if (n === 'data.write') return !!i.canWrite;
+      if (n === 'note.save') { const m = i.me; if (!m) return false; return !!(m.isAdmin || m.title === '제작실장' || (m.title === '원장' && (window.__noteSavers || []).includes(m.campus))); }   // 이 구성으로 저장: 관리자·제작실장 + 노트에 지정된 캠퍼스 원장
+      return null; },
     isOwner: async () => !!((await ready).me && (await ready).me.isAdmin),
     canEdit: async () => !!((await ready).me && (await ready).me.isAdmin),
     profiles: async ids => {
@@ -901,6 +903,7 @@ const BOOKS = {
   'spring-mid': {
     title: '2026 봄노트 · 센텀 중고등',
     base: '/notes/spring-mid/',
+    savers: ['센텀'],   // 「이 구성으로 저장하기」를 쓸 수 있는 캠퍼스 원장 (관리자·제작실장은 항상 가능). 서버 archive-notes의 SAVERS와 같아야 함
     preset: [{"id": "sp01", "cat": "cover", "name": "앞표지 · 센텀 그랜드 오픈", "file": "p01.jpg"}, {"id": "sp02", "cat": "cover", "name": "뒤표지 · 센텀 애니하이", "file": "p02.jpg"}, {"id": "sp03", "cat": "inner", "name": "인트로 · 전국 56개 캠퍼스", "file": "p03.jpg"}, {"id": "sp04", "cat": "inner", "name": "인트로 · 56개 캠퍼스 지도", "file": "p04.jpg"}, {"id": "sp05", "cat": "inner", "name": "꿈에 불을 밝히다", "file": "p05.jpg"}, {"id": "sp06", "cat": "inner", "name": "2026 미대입시 합격", "file": "p06.jpg"}, {"id": "sp07", "cat": "inner", "name": "합격 1 · 서울대 외", "file": "p07.jpg"}, {"id": "sp08", "cat": "inner", "name": "합격 2 · 한양대 외", "file": "p08.jpg"}, {"id": "sp09", "cat": "inner", "name": "합격 3 · 청강대 외", "file": "p09.jpg"}, {"id": "sp10", "cat": "inner", "name": "합격 4 · 성신여대 외", "file": "p10.jpg"}, {"id": "sp11", "cat": "inner", "name": "최상위권 수상 1", "file": "p11.jpg"}, {"id": "sp12", "cat": "inner", "name": "최상위권 수상 2", "file": "p12.jpg"}, {"id": "sp13", "cat": "inner", "name": "기초디자인 · 문제제시형", "file": "p13.jpg"}, {"id": "sp14", "cat": "inner", "name": "기초디자인 · 연출형", "file": "p14.jpg"}, {"id": "sp15", "cat": "inner", "name": "만화·애니 · 청강대", "file": "p15.jpg"}, {"id": "sp16", "cat": "inner", "name": "만화·애니 · 4컷 만화웹툰", "file": "p16.jpg"}, {"id": "sp17", "cat": "inner", "name": "만화·애니 · 상황표현", "file": "p17.jpg"}, {"id": "sp18", "cat": "inner", "name": "만화·애니 · 일반 컷만화", "file": "p18.jpg"}, {"id": "sp19", "cat": "inner", "name": "와콤 신티크 클래스", "file": "p19.jpg"}, {"id": "sp20", "cat": "inner", "name": "전공 컨설팅", "file": "p20.jpg"}],
     spring: {mode:'single', ratio:R_SPRING, frontCount:9, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
       fill:{front:'sp01', fcin:'sp03', f1:'sp04', f2:'sp05', f3:'sp06', f4:'sp07', f5:'sp08', f6:'sp09', f7:'sp10', f8:'sp11', f9:'sp12',
@@ -909,6 +912,7 @@ const BOOKS = {
   'spring-elem': {
     title: '2026 봄노트 · 센텀 초등',
     base: '/notes/spring-elem/',
+    savers: ['센텀'],
     preset: [{"id": "se01", "cat": "cover", "name": "앞표지 · 1st Season", "file": "p01.jpg"}, {"id": "se02", "cat": "cover", "name": "뒤표지 · 센텀 캠퍼스 하이파이브·애니하이", "file": "p02.jpg"}, {"id": "se03", "cat": "inner", "name": "인트로 · 전국 56개 캠퍼스", "file": "p03.jpg"}, {"id": "se04", "cat": "inner", "name": "인트로 · 센텀 그랜드 오픈·약도", "file": "p04.jpg"}, {"id": "se05", "cat": "inner", "name": "초·중등 미술교육 왜 중요한가", "file": "p05.jpg"}, {"id": "se06", "cat": "inner", "name": "센텀 하이파이브 미술학원 소개", "file": "p06.jpg"}, {"id": "se07", "cat": "inner", "name": "디자인학과와 관련직업", "file": "p07.jpg"}, {"id": "se08", "cat": "inner", "name": "What Is My Future Job?", "file": "p08.jpg"}, {"id": "se09", "cat": "inner", "name": "디자인&캐릭터", "file": "p09.jpg"}, {"id": "se10", "cat": "inner", "name": "일러스트레이션", "file": "p10.jpg"}, {"id": "se11", "cat": "inner", "name": "하이파이브 앱", "file": "p11.jpg"}, {"id": "se12", "cat": "inner", "name": "만화·애니과 관련직업 1", "file": "p12.jpg"}, {"id": "se13", "cat": "inner", "name": "만화·애니과 관련직업 2", "file": "p13.jpg"}, {"id": "se14", "cat": "inner", "name": "만화&웹툰", "file": "p14.jpg"}, {"id": "se15", "cat": "inner", "name": "와콤 신티크 클래스", "file": "p15.jpg"}, {"id": "se16", "cat": "inner", "name": "진로컨설팅", "file": "p16.jpg"}],
     spring: {mode:'single', ratio:R_SPRING, frontCount:8, backCount:4, linkBack:false, blankCount:18, blankStyle:'lined',
       fill:{front:'se01', fcin:'se03', f1:'se04', f2:'se05', f3:'se06', f4:'se07', f5:'se08', f6:'se09', f7:'se10', f8:'se11',
@@ -916,6 +920,7 @@ const BOOKS = {
   }
 };
 const BOOK = BOOKS[BOOK_ID] || BOOKS['spring-mid'];
+window.__noteSavers = BOOK.savers || [];
 document.title = BOOK.title; document.querySelector('h1').textContent = BOOK.title;
 const PRESET = BOOK.preset.map(m => ({id:m.id, cat:m.cat, name:m.name, src:BOOK.base + m.file, wide:false, preset:true}));
 const SPRING = BOOK.spring;
@@ -1676,7 +1681,7 @@ fb.addEventListener('pointerup', endGest);
 fb.addEventListener('pointercancel', endGest);
 
 /* ── 코멘트 (공유 저장 · 로그인한 멤버만 작성) ─────────────────── */
-const CM = {notes:[], replies:[], stickers:[], ready:false, db:null, user:null, uid:null, canWrite:false, owner:false, names:{}, status:'loading'};
+const CM = {notes:[], replies:[], stickers:[], ready:false, db:null, user:null, uid:null, canWrite:false, canSave:false, owner:false, names:{}, status:'loading'};
 const tool = () => state.cmode && CM.canWrite ? (state.tool || 'none') : 'none';
 function cmtCount(it){
   const keys = new Set(it.anchors.map(a => a.key));
@@ -2041,6 +2046,7 @@ function goAnchor(page, noteId){
   CM.uid = user ? await user.id() : null;
   const w = user ? await user.can('data.write') : null;
   CM.canWrite = !!CM.uid && w !== false;
+  CM.canSave = CM.canWrite && (user ? (await user.can('note.save')) === true : false);
   CM.owner = user ? await user.isOwner() : false;
   CM.status = 'on';
   const sub = (name, key) => db.collection(name).limit(1000).onSnapshot(snap => {
@@ -2117,21 +2123,21 @@ function maybeFirstRun(force){
 }
 function renderShareBar(){
   const sb = $('shareBtn'), bar = $('sharebar');
-  sb.disabled = !CM.canWrite || SH.busy;
-  sb.textContent = SH.busy ? '공유하는 중…' : '↗ 이 구성 공유하기';
-  sb.title = !CM.db ? '로그인한 멤버만 공유할 수 있어요.' : !CM.canWrite ? '공유는 코멘트를 쓸 수 있는 멤버만 할 수 있어요.' : '지금 설정과 이미지 배치를 링크를 여는 사람들에게 보여줘요.';
+  sb.disabled = !CM.canSave || SH.busy;
+  sb.textContent = SH.busy ? '저장하는 중…' : '↗ 이 구성으로 저장하기';
+  sb.title = !CM.db ? '로그인한 멤버만 저장할 수 있어요.' : !CM.canSave ? '이 노트의 구성 저장은 관리자·제작실장·' + (BOOK.savers || []).join('·') + ' 원장만 할 수 있어요.' : '지금 설정과 이미지 배치를 링크를 여는 사람들에게 보여줘요.';
   if (!SH.main || state.cmode) { bar.hidden = true; return; }
   bar.hidden = false; bar.innerHTML = '';
   const mineBy = SH.main.by === CM.uid, when = SH.main.at ? ago(SH.main.at) : '';
   const t = document.createElement('span');
   const who = document.createElement('b'); who.textContent = mineBy ? '내가' : nameOf(SH.main.by) + '님이';
-  if (state.source === 'shared') { t.append('📌 ', who, ` ${when} 공유한 구성이에요`); }
-  else { t.append('✏️ 내 수정본을 보고 있어요 · 공유 구성은 ', who, ` ${when} 공유`); }
+  if (state.source === 'shared') { t.append('📌 ', who, ` ${when} 저장한 구성이에요`); }
+  else { t.append('✏️ 내 수정본을 보고 있어요 · 저장된 구성은 ', who, ` ${when} 저장`); }
   bar.appendChild(t);
   const btn = (label, fn, primary) => { const b = document.createElement('button'); b.className = 'btn small' + (primary ? ' primary' : ''); b.textContent = label; b.onclick = fn; bar.appendChild(b); return b; };
   if (state.source === 'shared') { if (state.mine && sigOf(state.mine) !== sigOf(SH.main.layout)) btn('내 수정본 보기', showMine); }
-  else btn('공유 구성으로 돌아가기', applyShared, true);
-  btn('이전 공유본', e => openHistory(e.currentTarget));
+  else btn('저장된 구성으로 돌아가기', applyShared, true);
+  btn('이전 저장본', e => openHistory(e.currentTarget));
 }
 setInterval(() => { if (SH.main && !$('sharebar').hidden) renderShareBar(); }, 60000);
 
@@ -2148,12 +2154,12 @@ async function toShareSrc(src){
   }
   return null;
 }
-const shareErr = e => e && e.code === 'quota_exceeded' ? '공유 저장 공간이 가득 찼어요. 오래된 코멘트나 이미지를 줄여주세요.' :
-  e && e.code === 'invalid_argument' ? '이 링크에서는 공유할 권한이 없어요.' : '공유하지 못했어요. 잠시 후 다시 해주세요.';
+const shareErr = e => e && e.code === 'quota_exceeded' ? '저장 공간이 가득 찼어요. 오래된 코멘트나 이미지를 줄여주세요.' :
+  e && e.code === 'invalid_argument' ? '이 노트는 저장 권한이 있는 사람만 저장할 수 있어요.' : '저장하지 못했어요. 잠시 후 다시 해주세요.';
 async function writeShared(layout, imgs, extra = {}){
   const db = CM.db, now = Date.now();
   const cur = await db.doc('book/main').get();
-  if (cur.exists) {   // 이전 공유본은 기록으로 남기고 최근 20개만 둠
+  if (cur.exists) {   // 이전 저장본은 기록으로 남기고 최근 20개만 둠
     const prev = cleanShared(cur.data());
     if (prev) await db.collection('book_history').add({layout:prev.layout, imgs:prev.imgs, by:prev.by, at:prev.at, archivedAt:now});
   }
@@ -2164,7 +2170,7 @@ async function writeShared(layout, imgs, extra = {}){
   } catch(e) {}
 }
 async function shareNow(){
-  if (!CM.canWrite || SH.busy) return;
+  if (!CM.canSave || SH.busy) return;
   SH.busy = true; renderShareBar();
   try {
     const valid = new Set(allSlots());
@@ -2185,20 +2191,20 @@ async function shareNow(){
     state.source = 'shared';
     await writeShared(layout, imgs);
     state.mine = layoutOf(state);
-    toast('공유했어요. 링크를 여는 사람은 이 구성을 먼저 봐요.');
+    toast('저장했어요. 이 노트를 여는 사람은 이 구성을 먼저 봐요.');
   } catch (e) {
-    toast(e && e.code === 'too_big' ? `'${e.name}' 이미지가 너무 커서 공유하지 못했어요.` : shareErr(e));
+    toast(e && e.code === 'too_big' ? `'${e.name}' 이미지가 너무 커서 저장하지 못했어요.` : shareErr(e));
     if (state.source === 'shared' && (!SH.main || sigOf(SH.main.layout) !== sigOf(layoutOf(state)))) state.source = 'mine';
   }
   SH.busy = false; renderShareBar();
 }
 $('shareBtn').onclick = shareNow;
 
-// 이전 공유본 기록 · 되돌리기
+// 이전 저장본 기록 · 되돌리기
 async function openHistory(el){
   closePop();
   popState = {type:'hist', el, rows:null};
-  pop.innerHTML = '<div class="meta"><b>이전 공유본</b></div><div class="who-list">불러오는 중…</div>';
+  pop.innerHTML = '<div class="meta"><b>이전 저장본</b></div><div class="who-list">불러오는 중…</div>';
   const r = el.getBoundingClientRect(); placePop(r.left, r.bottom + 20);
   try {
     const snap = await CM.db.collection('book_history').orderBy('archivedAt', 'desc').limit(20).get();
@@ -2209,24 +2215,24 @@ async function openHistory(el){
 }
 function renderHist(){
   const rows = popState.rows; if (!rows) return;
-  pop.innerHTML = `<div class="meta"><b>이전 공유본</b><span class="where">최근 ${rows.length}개</span></div>`;
-  if (!rows.length) { const e = document.createElement('div'); e.className = 'who-list'; e.textContent = '아직 이전 공유본이 없어요. 다시 공유하면 지금 공유본이 여기 남아요.'; pop.appendChild(e); }
+  pop.innerHTML = `<div class="meta"><b>이전 저장본</b><span class="where">최근 ${rows.length}개</span></div>`;
+  if (!rows.length) { const e = document.createElement('div'); e.className = 'who-list'; e.textContent = '아직 이전 저장본이 없어요. 다시 저장하면 지금 저장본이 여기 남아요.'; pop.appendChild(e); }
   rows.forEach(h => {
     const L = h.layout, row = document.createElement('div'); row.className = 'hrow';
     const t = document.createElement('div'); t.className = 't';
     const b = document.createElement('b'); b.textContent = h.by === CM.uid ? '나' : nameOf(h.by);
-    const s1 = document.createElement('small'); s1.textContent = ` · ${h.at ? ago(h.at) : ''} 공유`;
+    const s1 = document.createElement('small'); s1.textContent = ` · ${h.at ? ago(h.at) : ''} 저장`;
     const s2 = document.createElement('small'); s2.textContent = `${L.mode === 'double' ? '양면' : '단면'} · 앞 속지 ${L.frontCount} · 백지 ${L.blankCount} · 뒤 속지 ${L.backCount} · 이미지 ${Object.keys(L.fill).length}칸`;
     t.append(b, s1, document.createElement('br'), s2); row.appendChild(t);
-    if (CM.canWrite) { const go = document.createElement('button'); go.className = 'btn small'; go.textContent = '되돌리기'; go.onclick = () => restoreShared(h); row.appendChild(go); }
+    if (CM.canSave) { const go = document.createElement('button'); go.className = 'btn small'; go.textContent = '되돌리기'; go.onclick = () => restoreShared(h); row.appendChild(go); }
     pop.appendChild(row);
   });
-  if (!CM.canWrite) { const e = document.createElement('div'); e.className = 'who-list'; e.textContent = '되돌리기는 멤버만 할 수 있어요.'; pop.appendChild(e); }
+  if (!CM.canSave) { const e = document.createElement('div'); e.className = 'who-list'; e.textContent = '되돌리기는 저장 권한이 있는 사람만 할 수 있어요.'; pop.appendChild(e); }
 }
 async function restoreShared(h){
-  if (!CM.canWrite || SH.busy) return;
+  if (!CM.canSave || SH.busy) return;
   closePop(); SH.busy = true; renderShareBar();
-  try { state.source = 'shared'; await writeShared(h.layout, h.imgs, {restoredFrom:h.at}); toast('이전 공유본으로 되돌렸어요. 바꾸기 전 공유본도 기록에 남았어요.'); }
+  try { state.source = 'shared'; await writeShared(h.layout, h.imgs, {restoredFrom:h.at}); toast('이전 저장본으로 되돌렸어요. 바꾸기 전 공유본도 기록에 남았어요.'); }
   catch(e) { toast(shareErr(e)); }
   SH.busy = false; renderShareBar();
 }
@@ -2697,7 +2703,7 @@ $('cList').onclick = () => { if (state.tab !== 'cmt') state.tab = 'cmt'; renderT
 function renderMore(){
   const st = $('mStatus'), txt = $('sharebar').querySelector('span')?.textContent || '';
   st.hidden = !SH.main || !txt; st.textContent = txt;
-  $('miShare').disabled = !CM.canWrite || SH.busy; $('miBack').hidden = !(SH.main && state.source !== 'shared'); $('miHist').disabled = !CM.db;
+  $('miShare').disabled = !CM.canSave || SH.busy; $('miBack').hidden = !(SH.main && state.source !== 'shared'); $('miHist').disabled = !CM.db;
   $('miMk').disabled = !EMBED;
 }
 function openMore(){ renderMore(); $('scrim').hidden = false; $('more').hidden = false; }

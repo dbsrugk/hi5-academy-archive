@@ -17,6 +17,10 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 const now = () => new Date().toISOString();
 const slot = (minutes: number) => Math.floor(Date.now() / (minutes * 60_000));
 const isProducer = (t: string) => t === "제작실장";
+// 「이 구성으로 저장하기」(noteBooks의 <노트>:main · <노트>:h:…): 관리자·제작실장 + 노트별로 지정한 캠퍼스의 원장.
+// 새 노트를 추가하면 여기에도 한 줄 추가 (public/notes/editor.html 의 BOOKS.savers 와 같게).
+const SAVERS: Record<string, string[]> = { "spring-mid": ["센텀"], "spring-elem": ["센텀"] };
+const canSaveBook = (me: Member, id: string) => me.is_admin || isProducer(me.title) || (me.title === "원장" && (SAVERS[id.split(":")[0]] ?? []).includes(me.campus));
 
 // 노트 컬렉션: noteBooks(구성·공유 기록) · noteComments(포스트잇·답글·스티커) · noteImages(공유 이미지, 한 장씩 읽기만)
 const COLLECTIONS = new Set(["noteBooks", "noteComments", "noteImages"]);
@@ -143,6 +147,7 @@ async function write(op: string, body: Json, me: Member) {
   const collection = String(body.collection ?? ""), id = String(body.id ?? "");
   if (!COLLECTIONS.has(collection) || !ID_RE.test(id)) return json({ error: "잘못된 요청입니다." }, 400);
   const manager = me.is_admin || isProducer(me.title);
+  if (collection === "noteBooks" && !canSaveBook(me, id)) return json({ error: "이 노트의 구성 저장은 관리자·제작실장·지정된 캠퍼스 원장만 할 수 있어요." }, 403);
   const { data: row, error: readError } = await supabase.from("docs").select("data").eq("collection", collection).eq("id", id).maybeSingle();
   if (readError) throw readError;
   const existing = (row?.data ?? null) as Json | null;
@@ -150,7 +155,7 @@ async function write(op: string, body: Json, me: Member) {
   if (op === "delete") {
     if (!existing) return json({ ok: true });
     if (collection === "noteImages" && !manager) return json({ error: "공유 이미지는 관리자만 지울 수 있어요." }, 403);
-    if (collection === "noteBooks" && id.endsWith(":main") && !manager) return json({ error: "공유 구성은 지울 수 없어요." }, 403);
+    if (collection === "noteBooks" && id.endsWith(":main") && !manager) return json({ error: "저장된 구성은 지울 수 없어요." }, 403);
     if (collection === "noteComments" && !manager && existing.createdById !== me.id) return json({ error: "다른 사람의 코멘트는 지울 수 없어요." }, 403);
     const { error } = await supabase.from("docs").delete().eq("collection", collection).eq("id", id);
     if (error) throw error;
@@ -200,7 +205,7 @@ async function notifyAfterWrite(collection: string, id: string, prev: Json | nul
     }
   } else if (collection === "noteBooks" && id.endsWith(":main") && next.layout) {
     const ids = await prodManagerIds(me.id);
-    await notifyGrouped(ids, { kind: "notes", title: "📚 노트 구성이 공유됐어요", body: `${who(me)}님이 구성을 공유했어요`, link: "#notes", ref: `notes-share-${me.id}-${slot(10)}` });
+    await notifyGrouped(ids, { kind: "notes", title: "📚 노트 구성이 저장됐어요", body: `${who(me)}님이 구성을 저장했어요`, link: "#notes", ref: `notes-share-${me.id}-${slot(10)}` });
   }
 }
 
