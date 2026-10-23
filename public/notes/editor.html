@@ -1261,6 +1261,7 @@ function setFR(anim){
   const end = e => {
     const g = d; d = null; sc.classList.remove('drag');
     if (!g || g.moved || e.type !== 'pointerup') return;
+    if (document.body.classList.contains('big') && !g.onBook) { bigToggle(); return; }   // 크게 보기: 바탕을 누르면 닫힘
     // 노트를 두 번 누르면(마우스 더블클릭·손가락 두 번 탭) 펼쳐짐
     const onBook = g.onBook, now = performance.now();
     if (onBook && now - lastTap < 400) { lastTap = 0; $('fOpen').click(); }
@@ -1634,6 +1635,7 @@ const endGest = e => {
   const g = gest; gest = null; fb.classList.remove('grab');
   if (!g.active) {
     // 최종본: 오른쪽 페이지를 누르면 다음 장, 왼쪽 페이지를 누르면 이전 장
+    if (state.view === 'final' && document.body.classList.contains('big')) { bigToggle(); return; }   // 크게 보기: 한 번 더 누르면 닫힘 (넘기기는 끌기·화살표 키)
     if (state.view === 'final') {
       const r = fb.getBoundingClientRect(), dir = (ROT() ? g.x0 >= r.top + r.height / 2 : g.x0 >= r.left + r.width / 2) ? 1 : -1;
       if (g.blank && blankJump(dir)) return;   // 백지를 누르면 백지 묶음 끝으로 샤라락
@@ -2507,6 +2509,7 @@ function bigToggle(){
   setTimeout(renderBook, 120);
 }
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.body.classList.contains('big')) { document.body.classList.remove('big'); try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch (_) {} setTimeout(renderBook, 60); } });
+$('bookwrap').addEventListener('click', e => { if (document.body.classList.contains('big') && !e.target.closest('#flipbox')) bigToggle(); });
 $('bigBtn').onclick = bigToggle; $('bigBtn2').onclick = bigToggle; $('bigX').onclick = bigToggle;
 addEventListener('resize', () => { if (document.body.classList.contains('big')) renderBook(); });
 function syncBig(){ const b = document.body.classList.contains('big'); document.body.classList.toggle('rot', b && MOB && !MOBL && innerHeight > innerWidth && state.view === 'final' && !!state.finalOpen); $('bigBtn').textContent = b ? '⛶ 작게' : '⛶ 크게'; $('bigBtn2').textContent = b ? '⛶ 작게 보기' : '⛶ 크게 보기'; }
