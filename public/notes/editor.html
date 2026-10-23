@@ -538,6 +538,9 @@ body.mobl .final .fctl .btn{height:44px;width:100%}
 body.mobl #fOpen{grid-column:auto;height:48px}
 
 
+/* 스프링 제본이 아니라서 링 표현은 쓰지 않음 */
+.spread.rings::after,.overview .spread.rings::after,.coil{display:none!important}
+.flipbox{touch-action:none}
 /* ── 크게 보기 ── */
 .lb{position:fixed;inset:0;z-index:70;background:rgba(14,22,34,.94);display:flex;flex-direction:column}
 .lb[hidden]{display:none}
@@ -1284,7 +1287,7 @@ $('fOpen').onclick = () => {
   state.finalOpen = true; state.group = 'all'; state.cur = B.items[fromBack ? B.items.length - 1 : 0].id; sel = null; closePop(); commit();
   setTimeout(() => flip(fromBack ? -1 : 1), 380);   // 표지가 넘어가며 열림
 };
-$('fClose').onclick = () => { state.finalOpen = false; commit(); };
+$('fClose').onclick = () => { if (typeof zreset === 'function') zreset(); state.finalOpen = false; commit(); };
 let frT; addEventListener('resize', () => { clearTimeout(frT); frT = setTimeout(() => { if (state.view === 'final' && !state.finalOpen && !state.cmode) renderFinal(); }, 150); });
 function ovShow(id){
   const view = document.querySelector('.ovview'), c = view && view.querySelector(`.ov[data-item="${CSS.escape(id)}"]`);
@@ -2505,6 +2508,7 @@ document.addEventListener('click', e => {   // 전체보기에서 그림을 눌�
 
 const fsOK = !!(document.documentElement.requestFullscreen);
 function bigToggle(){
+  zreset();
   const on = document.body.classList.contains('big');
   if (on) { document.body.classList.remove('big'); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch (_) {} renderBook(); return; }
   document.body.classList.add('big');
@@ -2519,6 +2523,40 @@ $('bigBtn').onclick = bigToggle; $('bigBtn2').onclick = bigToggle; $('bigX').onc
 addEventListener('resize', () => { if (document.body.classList.contains('big')) renderBook(); });
 function lockLand(on){ try { if (!screen.orientation) return; if (on) screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); else screen.orientation.unlock && screen.orientation.unlock(); } catch (_) {} }
 function syncBig(){ const b = document.body.classList.contains('big'); if (fsOK && document.fullscreenElement) lockLand(b && state.view === 'final' && !!state.finalOpen); document.body.classList.toggle('rot', b && MOB && !MOBL && innerHeight > innerWidth && state.view === 'final' && !!state.finalOpen); $('bigBtn').textContent = b ? '⛶ 작게' : '⛶ 크게'; $('bigBtn2').textContent = b ? '⛶ 작게 보기' : '⛶ 크게 보기'; }
+
+/* ── 최종본 손가락 확대: 두 손가락 벌리기(Ctrl+휠), 확대 중 한 손가락은 이동, 두 번 탭하면 원래대로 ── */
+let ZS = 1, ZX = 0, ZY = 0;
+const zp = new Map(); let zg = null, zLast = 0;
+function zapply(){ fb.style.transformOrigin = '50% 50%'; fb.style.transform = ZS > 1.001 ? `translate(${ZX}px,${ZY}px) scale(${ZS})` : ''; }
+function zclamp(){ const mx = fb.offsetWidth * (ZS - 1) / 2, my = fb.offsetHeight * (ZS - 1) / 2; ZX = Math.max(-mx, Math.min(mx, ZX)); ZY = Math.max(-my, Math.min(my, ZY)); }
+function zreset(){ ZS = 1; ZX = 0; ZY = 0; zp.clear(); zg = null; zapply(); }
+const zloc = (dx, dy) => ROT() ? [dy, -dx] : [dx, dy];   // 화면 이동량 → 노트 안쪽 좌표 (세로 폰 돌림 보정)
+const zdist = () => { const [a, b] = [...zp.values()]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
+const zmid = () => { const [a, b] = [...zp.values()]; return {x:(a.x + b.x) / 2, y:(a.y + b.y) / 2}; };
+fb.addEventListener('pointerdown', e => {
+  if (state.view !== 'final' || !state.finalOpen) return;
+  zp.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (zp.size === 2) {
+    if (fl) finishFlip(0); gest = null; fb.classList.remove('grab');
+    const m = zmid(); zg = {pinch:true, d0:zdist(), s0:ZS, mx:m.x, my:m.y, zx:ZX, zy:ZY}; e.stopImmediatePropagation(); e.preventDefault();
+  } else if (ZS > 1.001) {
+    const now = performance.now(); if (now - zLast < 320) { zreset(); zLast = 0; e.stopImmediatePropagation(); return; } zLast = now;
+    zg = {pan:true, x:e.clientX, y:e.clientY, zx:ZX, zy:ZY}; e.stopImmediatePropagation();
+    try { fb.setPointerCapture(e.pointerId); } catch (_) {}
+  }
+}, true);
+fb.addEventListener('pointermove', e => {
+  if (!zp.has(e.pointerId)) return; zp.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (!zg) return;
+  if (zg.pinch && zp.size >= 2) {
+    ZS = Math.max(1, Math.min(4, zg.s0 * zdist() / zg.d0)); const m = zmid(); const [lx, ly] = zloc(m.x - zg.mx, m.y - zg.my); ZX = zg.zx + lx; ZY = zg.zy + ly; zclamp(); zapply(); e.stopImmediatePropagation();
+  } else if (zg.pan) {
+    const [lx, ly] = zloc(e.clientX - zg.x, e.clientY - zg.y); ZX = zg.zx + lx; ZY = zg.zy + ly; zclamp(); zapply(); e.stopImmediatePropagation();
+  }
+}, true);
+const zup = e => { if (!zp.has(e.pointerId)) return; zp.delete(e.pointerId); if (zg && zp.size < 2) { const wasPinch = zg.pinch; zg = null; if (ZS < 1.05) zreset(); if (wasPinch) zLast = 0; } };
+fb.addEventListener('pointerup', zup, true); fb.addEventListener('pointercancel', zup, true);
+$('bookwrap').addEventListener('wheel', e => { if (!e.ctrlKey || state.view !== 'final' || !state.finalOpen) return; e.preventDefault(); ZS = Math.max(1, Math.min(4, ZS * (e.deltaY < 0 ? 1.15 : 1 / 1.15))); if (ZS < 1.02) ZS = 1; zclamp(); zapply(); }, {passive:false});
 
 /* ── 모바일 화면 (좁은 화면 · 가로로 돌린 폰) ──────────────────────────
    body.mob 일 때만: 한 쪽씩 보기(pview) · 두 줄 모아보기(ovm) · 아래 4칸 메뉴 · 이미지 서랍은 아래 창 · 더보기 창.
