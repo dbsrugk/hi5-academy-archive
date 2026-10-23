@@ -531,6 +531,11 @@ body.mobl .flipbox{width:min(100cqw,calc(100cqh * var(--pr2)))}
 body.mobl.final-on .bookwrap.final{padding-bottom:20px}
 body.mobl .bookwrap.final .flipbox{transform:rotateX(8deg)}
 body.mobl .tray{height:84vh}
+body.mobl .final:not([hidden]){display:flex;flex-direction:row;align-items:center;gap:18px;padding:6px 18px 6px;width:100%}
+body.mobl .final .fscene{flex:1;height:100%;min-height:0}
+body.mobl .final .fctl{display:flex;flex-direction:column;width:min(240px,34vw);gap:8px;flex:0 0 auto}
+body.mobl .final .fctl .btn{height:44px;width:100%}
+body.mobl #fOpen{grid-column:auto;height:48px}
 
 
 /* ── 크게 보기 ── */
@@ -2503,7 +2508,7 @@ function bigToggle(){
   const on = document.body.classList.contains('big');
   if (on) { document.body.classList.remove('big'); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch (_) {} renderBook(); return; }
   document.body.classList.add('big');
-  const done = () => { try { screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); } catch (_) {} };
+  const done = () => lockLand(state.view === 'final' && !!state.finalOpen);
   if (fsOK) document.documentElement.requestFullscreen({navigationUI:'hide'}).then(done, () => toast('전체 화면이 막혀 있어요. 폰을 가로로 돌리면 더 크게 보여요.'));
   else toast('폰을 가로로 돌리면 더 크게 보여요.');
   setTimeout(renderBook, 120);
@@ -2512,7 +2517,8 @@ document.addEventListener('fullscreenchange', () => { if (!document.fullscreenEl
 $('bookwrap').addEventListener('click', e => { if (document.body.classList.contains('big') && !e.target.closest('#flipbox')) bigToggle(); });
 $('bigBtn').onclick = bigToggle; $('bigBtn2').onclick = bigToggle; $('bigX').onclick = bigToggle;
 addEventListener('resize', () => { if (document.body.classList.contains('big')) renderBook(); });
-function syncBig(){ const b = document.body.classList.contains('big'); document.body.classList.toggle('rot', b && MOB && !MOBL && innerHeight > innerWidth && state.view === 'final' && !!state.finalOpen); $('bigBtn').textContent = b ? '⛶ 작게' : '⛶ 크게'; $('bigBtn2').textContent = b ? '⛶ 작게 보기' : '⛶ 크게 보기'; }
+function lockLand(on){ try { if (!screen.orientation) return; if (on) screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {}); else screen.orientation.unlock && screen.orientation.unlock(); } catch (_) {} }
+function syncBig(){ const b = document.body.classList.contains('big'); if (fsOK && document.fullscreenElement) lockLand(b && state.view === 'final' && !!state.finalOpen); document.body.classList.toggle('rot', b && MOB && !MOBL && innerHeight > innerWidth && state.view === 'final' && !!state.finalOpen); $('bigBtn').textContent = b ? '⛶ 작게' : '⛶ 크게'; $('bigBtn2').textContent = b ? '⛶ 작게 보기' : '⛶ 크게 보기'; }
 
 /* ── 모바일 화면 (좁은 화면 · 가로로 돌린 폰) ──────────────────────────
    body.mob 일 때만: 한 쪽씩 보기(pview) · 두 줄 모아보기(ovm) · 아래 4칸 메뉴 · 이미지 서랍은 아래 창 · 더보기 창.
