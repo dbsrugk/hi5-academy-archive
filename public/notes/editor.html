@@ -1644,6 +1644,7 @@ const endGest = e => {
   if (!gest) return;
   const g = gest; gest = null; fb.classList.remove('grab');
   if (!g.active) {
+    if (ZS > 1.001) return;   // 확대 중 탭은 넘기지 않음(두 번 탭 = 원래 크기)
     // 최종본: 오른쪽 페이지를 누르면 다음 장, 왼쪽 페이지를 누르면 이전 장
     if (state.view === 'final' && document.body.classList.contains('big')) { bigToggle(); return; }   // 크게 보기: 한 번 더 누르면 닫힘 (넘기기는 끌기·화살표 키)
     if (state.view === 'final') {
@@ -2542,9 +2543,7 @@ fb.addEventListener('pointerdown', e => {
     if (fl) finishFlip(0); gest = null; fb.classList.remove('grab');
     const m = zmid(); zg = {pinch:true, d0:zdist(), s0:ZS, mx:m.x, my:m.y, zx:ZX, zy:ZY}; e.stopImmediatePropagation(); e.preventDefault();
   } else if (ZS > 1.001) {
-    const now = performance.now(); if (now - zLast < 320) { zreset(); zLast = 0; e.stopImmediatePropagation(); return; } zLast = now;
-    zg = {pan:true, x:e.clientX, y:e.clientY, zx:ZX, zy:ZY}; e.stopImmediatePropagation();
-    try { fb.setPointerCapture(e.pointerId); } catch (_) {}
+    const now = performance.now(); if (now - zLast < 320) { zreset(); zLast = 0; e.stopImmediatePropagation(); return; } zLast = now;   // 확대 중에도 한 손가락 끌기는 페이지 넘기기, 두 손가락은 이동·확대
   }
 }, true);
 fb.addEventListener('pointermove', e => {
