@@ -17,6 +17,8 @@ const BOOKS = [
   { id: "spring-elem", title: "2026 봄노트 · 센텀 초등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/spring-elem/p01.jpg" },
   { id: "summer-mj-elem", title: "2026 여름노트 · 명지 초등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/summer-mj-elem/p01.jpg" },
   { id: "summer-mj-mid", title: "2026 여름노트 · 명지 중고등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/summer-mj-mid/p01.jpg" },
+  { id: "summer-gh-elem", title: "2026 여름노트 · 김해 초등", subtitle: "표지 2장 · 속지 18장 · 단면", cover: "/notes/summer-gh-elem/p01.jpg" },
+  { id: "summer-gh-mid", title: "2026 여름노트 · 김해 중고등", subtitle: "표지 2장 · 속지 18장 · 단면", cover: "/notes/summer-gh-mid/p01.jpg" },
 ];
 const OPEN_KEY = "hi5-notes-open";
 
