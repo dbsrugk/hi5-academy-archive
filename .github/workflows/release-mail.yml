@@ -1,0 +1,13 @@
+# main에 푸시가 올라오면 업데이트 소식 메일 발송 (서버 함수 archive-release-mail 호출)
+name: release-mail
+on:
+  push:
+    branches: [main]
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 배포 반영 시간을 잠깐 기다린 뒤 알림 요청
+        run: |
+          sleep 60
+          curl -sS -X POST "https://xflelzgpwgavtwixiolg.supabase.co/functions/v1/archive-release-mail" -H "content-type: application/json" -d '{}' --max-time 60

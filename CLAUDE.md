@@ -11,6 +11,7 @@
 - 커밋 전 항상 `git pull --rebase` (다른 대화방이 push했을 수 있음). push가 500이면 재시도.
 - `main`에 push하면 Vercel이 자동 배포. **서버(edge function) 배포가 필요한 화면 변경은 서버 먼저 배포하고 나서 push** (안 그러면 운영 사이트가 깨짐).
 - `pkill -f` 쓰지 말 것.
+- **업데이트 소식 메일**: 사이트를 고치거나 마케팅 제작물 등록·자료함 정리 등 눈에 띄는 작업을 끝내면, 경학님께 쉬운 말로 풀어쓴 메일을 1통 보낸다 (5번 항목의 방법). 코드 푸시는 GitHub Action이 자동으로도 보내니, 커밋 메시지는 사람이 읽어도 알아듣게 쓴다("CLAUDE.md:"로 시작하는 문서 커밋은 메일에서 제외).
 
 ## 1. 구조 요약
 - 화면: Vite + React 19 + Tailwind 4 + shadcn. `src/archive-api.ts`가 `/api/*` fetch를 가로채 edge function `call(path, body)`로 보냄.
@@ -50,6 +51,10 @@
 ## 5. 예약 작업
 - **"자료함 확인·정리 제안"** (매일 08:47·17:47 KST, 푸시 알림): status≠done인 자료함 묶음을 살펴 어디에 둘지 제안 → 사용자가 "응/ㄱㄱ" 하면 등록·정리 완료 처리. 드라이브 원본은 절대 삭제하지 않음.
 
+- **업데이트 소식 메일** (2026-10-28~, 받는 사람: 경학님만 — DB `app_config.release_mail_to`로 바꿈):
+  - 자동: `.github/workflows/release-mail.yml`이 main 푸시 1분 뒤 edge function **`archive-release-mail`**(verify_jwt=false) 호출 → 공개 저장소의 새 커밋을 읽어 메일 1통(이미 보낸 커밋은 `release_mail_last_sha`로 건너뜀). 코드는 `supabase/functions/archive-release-mail/index.ts` (저장소 = 배포본).
+  - 수동(쉬운 말, DB만 바뀌는 작업용): `POST https://xflelzgpwgavtwixiolg.supabase.co/functions/v1/archive-release-mail`, 헤더 `x-release-key`=DB `app_config.release_mail_key`(SQL로 읽어 쓰고 어디에도 적지 않음), 본문 `{"manual":true,"title":"…","items":[{"title":"…","body":"…"}]}`.
+
 ## 6. 테스트 방법
 - `npm run build` 후 `python3 -m http.server 4177 -d dist` + Playwright(`executablePath: /opt/pw-browsers/chromium`), 로그인 토큰은 sessionStorage `hi5-archive-token`.
 - 타입 검사: 기존 오류(next/image, promotions 데모 타입)는 원래 있던 것.
@@ -75,6 +80,7 @@
 - 뒤로가기: 사이트 안에서는 편집기가 기록을 따로 쌓지 않고(`EMBED`), `useBackClose`로 '노트 목록'으로만 돌아간다.
 
 ## 7. 최근 변경 기록 (최신이 위)
+- 2026-10-28 업데이트 소식 메일 추가(자동: 푸시마다 / 수동: Claude가 쉬운 말로). 받는 사람은 경학님만.
 - 2026-10-21 노트 제작: 끌어서(스와이프) 넘길 때는 부채 효과가 빠져 있던 문제 수정 — 백지 묶음 위에서 끌면 놓을 때 부채처럼 넘어감, 백지 묶음에 안내 문구 추가.
 - 2026-10-21 노트 제작: 펼친 최종본 노트가 안내 문구·서랍과 겹쳐 잘려 보이던 문제 수정(넓은 화면에서 노트 크기를 칸의 실제 크기 `cqh`로 맞추고 아래 종이 두께·그림자 자리를 남김).
 - 2026-10-21 노트 제작: 「마케팅 제작물 불러오기」 추가(편집기 서랍 + `notes-section.tsx`의 `marketing` 중계), 백지 묶음 부채 넘기기 효과 복구, 사진이 날아가다 멈춘 잔상 방지.
