@@ -888,7 +888,7 @@ body.big.rot .bar{display:none}
 (() => {
 const BOOK_ID = new URLSearchParams(location.search).get('book') || 'note-high-ct';
 const EMBED = window.parent !== window;   // 사이트 안에 끼워 열렸는지
-const KEY = 'hi5-note-' + BOOK_ID + '-v1';
+const KEY = 'hi5-note-' + BOOK_ID + '-v2';   // v2: 표지·속지 분류를 바로잡으면서 이전 브라우저 임시 구성을 새로 시작
 const BLANK_STYLES = [['plain','무지'],['lined','줄'],['grid','모눈'],['dot','도트']];
 const R_A4 = .7048, R_SPRING = .7575, R_NOTE = 1808/2434;
 const RATIOS = [[R_A4,'A5 · A4 비율 (148×210)'],[R_NOTE,'노트 (1808×2434)'],[R_SPRING,'봄노트 (1843×2433)'],[.75,'3 : 4']];
@@ -975,7 +975,17 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } c
 const LKEYS = ['mode','ratio','frontCount','backCount','linkBack','blankCount','blankStyle'];
 function layoutOf(s){ const o = {}; LKEYS.forEach(k => o[k] = s[k]); o.fill = {...(s.fill || {})}; return o; }
 const sigOf = l => l ? JSON.stringify([LKEYS.map(k => l[k]), Object.keys(l.fill || {}).sort().map(k => [k, l.fill[k]])]) : '';
-function applyLayout(l){ LKEYS.forEach(k => { if (l[k] !== undefined) state[k] = l[k]; }); state.fill = {...(l.fill || {})}; sel = null; }
+function cleanFill(f){   // 표지 칸에 속지, 속지 칸에 표지가 들어가 있거나 이 노트에 없는 기본 이미지면 비움
+  const o = {};
+  Object.keys(f || {}).forEach(slot => {
+    const id = f[slot], m = PRESET.find(x => x.id === id);
+    if (!m && /^n[he]\d\d$/.test(id)) return;
+    if (m && !slot.startsWith('D:') && m.cat !== ((slot === 'front' || slot === 'back') ? 'cover' : 'inner')) return;
+    o[slot] = id;
+  });
+  return o;
+}
+function applyLayout(l){ LKEYS.forEach(k => { if (l[k] !== undefined) state[k] = l[k]; }); state.fill = cleanFill(l.fill); sel = null; }
 if (!state.mine) state.mine = layoutOf(state); else applyLayout(state.mine);
 state.source = 'mine';
 if (state.tab === 'cmt' || state.cmode) { state.tab = state.prevTab || 'cover'; }
