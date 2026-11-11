@@ -13,12 +13,8 @@ import { useBackClose } from "@/hooks/use-back-close";
 
 // 새 노트를 넣으려면: 여기에 항목 추가 + public/notes/editor.html 의 BOOKS 에 같은 id 추가 + 이미지는 public/notes/<id>/
 const BOOKS = [
-  { id: "spring-mid", title: "2026 봄노트 · 센텀 중고등", subtitle: "표지 2장 · 속지 18장 · 단면", cover: "/notes/spring-mid/p01.jpg" },
-  { id: "spring-elem", title: "2026 봄노트 · 센텀 초등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/spring-elem/p01.jpg" },
-  { id: "summer-mj-elem", title: "2026 여름노트 · 명지 초등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/summer-mj-elem/p01.jpg" },
-  { id: "summer-mj-mid", title: "2026 여름노트 · 명지 중고등", subtitle: "표지 2장 · 속지 14장 · 단면", cover: "/notes/summer-mj-mid/p01.jpg" },
-  { id: "summer-gh-elem", title: "2026 여름노트 · 김해 초등", subtitle: "표지 2장 · 속지 18장 · 단면", cover: "/notes/summer-gh-elem/p01.jpg" },
-  { id: "summer-gh-mid", title: "2026 여름노트 · 김해 중고등", subtitle: "표지 2장 · 속지 18장 · 단면", cover: "/notes/summer-gh-mid/p01.jpg" },
+  { id: "note-high", title: "2026 노트 · 고등부", subtitle: "표지 6장 · 속지 22장 · 단면", cover: "/notes/note-high/p05.jpg" },
+  { id: "note-elem", title: "2026 노트 · 초중등부", subtitle: "표지 6장 · 속지 16장 · 단면", cover: "/notes/note-elem/p21.jpg" },
 ];
 const OPEN_KEY = "hi5-notes-open";
 
