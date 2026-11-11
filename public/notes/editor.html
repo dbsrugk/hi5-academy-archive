@@ -888,7 +888,7 @@ body.big.rot .bar{display:none}
 (() => {
 const BOOK_ID = new URLSearchParams(location.search).get('book') || 'note-high-ct';
 const EMBED = window.parent !== window;   // 사이트 안에 끼워 열렸는지
-const KEY = 'hi5-note-' + BOOK_ID + '-v2';   // v2: 표지·속지 분류를 바로잡으면서 이전 브라우저 임시 구성을 새로 시작
+const KEY = 'hi5-note-' + BOOK_ID + '-v3';   // v3: 명지·센텀에도 표지를 넣으면서 표지가 빈 채 남은 임시 구성을 새로 시작 (v2: 표지·속지 분류 정리)
 const BLANK_STYLES = [['plain','무지'],['lined','줄'],['grid','모눈'],['dot','도트']];
 const R_A4 = .7048, R_SPRING = .7575, R_NOTE = 1808/2434;
 const RATIOS = [[R_A4,'A5 · A4 비율 (148×210)'],[R_NOTE,'노트 (1808×2434)'],[R_SPRING,'봄노트 (1843×2433)'],[.75,'3 : 4']];
@@ -914,17 +914,17 @@ const BOOKS = {
     title: '2026 노트 · 명지 고등부',
     base: '/notes/note-high/',
     savers: [],   // 서버 SAVERS에 없는 노트 → 관리자·제작실장만 저장
-    preset: PRE_HIGH.filter(m => m.cat !== 'cover'),   // 명지·센텀 표지는 아직 없음(올릴 때까지 비워 둠)
+    preset: PRE_HIGH,
     spring: {mode:'single', ratio:R_NOTE, frontCount:15, backCount:9, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{fcin:'nh35', f1:'nh03', f2:'nh04', f3:'nh07', f4:'nh08', f5:'nh09', f6:'nh10', f7:'nh11', f8:'nh12', f9:'nh13', f10:'nh14', f11:'nh15', f12:'nh16', f13:'nh17', f14:'nh18', f15:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', r9:'nh28', bcin:'nh36'}}
+      fill:{front:'nh32', fcin:'nh35', f1:'nh03', f2:'nh04', f3:'nh07', f4:'nh08', f5:'nh09', f6:'nh10', f7:'nh11', f8:'nh12', f9:'nh13', f10:'nh14', f11:'nh15', f12:'nh16', f13:'nh17', f14:'nh18', f15:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', r9:'nh28', bcin:'nh36', back:'nh34'}}
   },
   'note-high-ct': {
     title: '2026 노트 · 센텀 고등부',
     base: '/notes/note-high/',
     savers: [],   // 서버 SAVERS에 없는 노트 → 관리자·제작실장만 저장
-    preset: PRE_HIGH.filter(m => m.cat !== 'cover'),   // 명지·센텀 표지는 아직 없음(올릴 때까지 비워 둠)
+    preset: PRE_HIGH,
     spring: {mode:'single', ratio:R_NOTE, frontCount:15, backCount:9, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{fcin:'nh35', f1:'nh05', f2:'nh06', f3:'nh07', f4:'nh08', f5:'nh09', f6:'nh10', f7:'nh11', f8:'nh12', f9:'nh13', f10:'nh14', f11:'nh15', f12:'nh16', f13:'nh17', f14:'nh18', f15:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', r9:'nh28', bcin:'nh36'}}
+      fill:{front:'nh32', fcin:'nh35', f1:'nh05', f2:'nh06', f3:'nh07', f4:'nh08', f5:'nh09', f6:'nh10', f7:'nh11', f8:'nh12', f9:'nh13', f10:'nh14', f11:'nh15', f12:'nh16', f13:'nh17', f14:'nh18', f15:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', r9:'nh28', bcin:'nh36', back:'nh34'}}
   },
   'note-elem-gh': {
     title: '2026 노트 · 김해 초중등부',
@@ -938,17 +938,17 @@ const BOOKS = {
     title: '2026 노트 · 명지 초중등부',
     base: '/notes/note-elem/',
     savers: [],
-    preset: PRE_ELEM.filter(m => m.cat !== 'cover'),   // 명지·센텀 표지는 아직 없음(올릴 때까지 비워 둠)
+    preset: PRE_ELEM,
     spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{fcin:'ne29', f1:'ne19', f2:'ne20', f3:'ne01', f4:'ne02', f5:'ne03', f6:'ne04', f7:'ne05', r1:'ne06', r2:'ne07', r3:'ne08', r4:'ne09', r5:'ne10', r6:'ne12', r7:'ne15', bcin:'ne30'}}
+      fill:{front:'ne23', fcin:'ne29', f1:'ne19', f2:'ne20', f3:'ne01', f4:'ne02', f5:'ne03', f6:'ne04', f7:'ne05', r1:'ne06', r2:'ne07', r3:'ne08', r4:'ne09', r5:'ne10', r6:'ne12', r7:'ne15', bcin:'ne30', back:'ne25'}}
   },
   'note-elem-ct': {
     title: '2026 노트 · 센텀 초중등부',
     base: '/notes/note-elem/',
     savers: [],
-    preset: PRE_ELEM.filter(m => m.cat !== 'cover'),   // 명지·센텀 표지는 아직 없음(올릴 때까지 비워 둠)
+    preset: PRE_ELEM,
     spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{fcin:'ne29', f1:'ne21', f2:'ne22', f3:'ne01', f4:'ne02', f5:'ne03', f6:'ne04', f7:'ne05', r1:'ne06', r2:'ne07', r3:'ne08', r4:'ne09', r5:'ne10', r6:'ne13', r7:'ne16', bcin:'ne30'}}
+      fill:{front:'ne23', fcin:'ne29', f1:'ne21', f2:'ne22', f3:'ne01', f4:'ne02', f5:'ne03', f6:'ne04', f7:'ne05', r1:'ne06', r2:'ne07', r3:'ne08', r4:'ne09', r5:'ne10', r6:'ne13', r7:'ne16', bcin:'ne30', back:'ne25'}}
   }
 };
 const BOOK = BOOKS[BOOK_ID] || BOOKS['note-high-ct'];

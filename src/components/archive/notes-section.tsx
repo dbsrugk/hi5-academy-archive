@@ -14,11 +14,11 @@ import { useBackClose } from "@/hooks/use-back-close";
 // 새 노트를 넣으려면: 여기에 항목 추가 + public/notes/editor.html 의 BOOKS 에 같은 id 추가 + 이미지는 public/notes/<id>/
 const BOOKS = [
   { id: "note-high-gh", title: "2026 노트 · 김해 고등부", subtitle: "표지 6장 · 속지 30장 · 단면", cover: "/notes/note-high/p32.jpg" },
-  { id: "note-high-mj", title: "2026 노트 · 명지 고등부", subtitle: "표지 6장 · 속지 30장 · 단면", cover: "/notes/note-high/p03.jpg" },
-  { id: "note-high-ct", title: "2026 노트 · 센텀 고등부", subtitle: "표지 6장 · 속지 30장 · 단면", cover: "/notes/note-high/p05.jpg" },
+  { id: "note-high-mj", title: "2026 노트 · 명지 고등부", subtitle: "표지 6장 · 속지 30장 · 단면", cover: "/notes/note-high/p32.jpg" },
+  { id: "note-high-ct", title: "2026 노트 · 센텀 고등부", subtitle: "표지 6장 · 속지 30장 · 단면", cover: "/notes/note-high/p32.jpg" },
   { id: "note-elem-gh", title: "2026 노트 · 김해 초중등부", subtitle: "표지 6장 · 속지 24장 · 단면", cover: "/notes/note-elem/p23.jpg" },
-  { id: "note-elem-mj", title: "2026 노트 · 명지 초중등부", subtitle: "표지 6장 · 속지 24장 · 단면", cover: "/notes/note-elem/p19.jpg" },
-  { id: "note-elem-ct", title: "2026 노트 · 센텀 초중등부", subtitle: "표지 6장 · 속지 24장 · 단면", cover: "/notes/note-elem/p21.jpg" },
+  { id: "note-elem-mj", title: "2026 노트 · 명지 초중등부", subtitle: "표지 6장 · 속지 24장 · 단면", cover: "/notes/note-elem/p23.jpg" },
+  { id: "note-elem-ct", title: "2026 노트 · 센텀 초중등부", subtitle: "표지 6장 · 속지 24장 · 단면", cover: "/notes/note-elem/p23.jpg" },
 ];
 const OPEN_KEY = "hi5-notes-open";
 
