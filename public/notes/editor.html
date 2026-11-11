@@ -730,7 +730,7 @@ body.big.rot .bar{display:none}
    편집기 코드는 Firestore와 비슷한 db / user 모양을 기대하므로 같은 모양으로 감싼다.
    저장 위치: noteBooks(구성·공유 기록·이전 저장본) · noteComments(포스트잇·답글·스티커) · noteImages(공유 이미지) */
 (() => {
-  const BOOK = new URLSearchParams(location.search).get('book') || 'note-high';
+  const BOOK = new URLSearchParams(location.search).get('book') || 'note-high-ct';
   const EMBED = window.parent !== window;
   const POLL_MS = 6000;                       // 다른 사람이 남긴 코멘트·공유를 이 간격으로 확인
   let info = null, resolveInfo; const ready = new Promise(r => { resolveInfo = r; });
@@ -886,7 +886,7 @@ body.big.rot .bar{display:none}
 </script>
 <script>
 (() => {
-const BOOK_ID = new URLSearchParams(location.search).get('book') || 'note-high';
+const BOOK_ID = new URLSearchParams(location.search).get('book') || 'note-high-ct';
 const EMBED = window.parent !== window;   // 사이트 안에 끼워 열렸는지
 const KEY = 'hi5-note-' + BOOK_ID + '-v1';
 const BLANK_STYLES = [['plain','무지'],['lined','줄'],['grid','모눈'],['dot','도트']];
@@ -899,25 +899,59 @@ const GROUPS = [['all','전체'],['front','앞 속지'],['blank','백지'],['bac
 /* ── 예시 이미지 ─────────────────────────────── */
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
 /* ── 노트 목록: 새 노트를 넣으려면 여기에 항목을 추가하고 이미지를 public/notes/<id>/ 에 둔다 ── */
+const PRE_HIGH = [{"id": "nh01", "cat": "cover", "name": "앞표지 · 김해 정답은 이곳", "file": "p01.jpg"}, {"id": "nh02", "cat": "cover", "name": "뒤표지 · 김해 약도", "file": "p02.jpg"}, {"id": "nh03", "cat": "cover", "name": "앞표지 · 명지 정답은 이곳", "file": "p03.jpg"}, {"id": "nh04", "cat": "cover", "name": "뒤표지 · 명지 약도", "file": "p04.jpg"}, {"id": "nh05", "cat": "cover", "name": "앞표지 · 센텀 정답은 이곳", "file": "p05.jpg"}, {"id": "nh06", "cat": "cover", "name": "뒤표지 · 센텀 약도", "file": "p06.jpg"}, {"id": "nh07", "cat": "inner", "name": "Design Class · 문제제시형 기초디자인", "file": "p07.jpg"}, {"id": "nh08", "cat": "inner", "name": "Design Class · 연출형 기초디자인", "file": "p08.jpg"}, {"id": "nh09", "cat": "inner", "name": "High Class · 기초소양·서울대", "file": "p09.jpg"}, {"id": "nh10", "cat": "inner", "name": "High Class · 기초조형평가·한예종", "file": "p10.jpg"}, {"id": "nh11", "cat": "inner", "name": "만화·애니 Class · 이미지 보드", "file": "p11.jpg"}, {"id": "nh12", "cat": "inner", "name": "만화·애니 · 흑백 칸만화", "file": "p12.jpg"}, {"id": "nh13", "cat": "inner", "name": "만화·애니 · 상황표현", "file": "p13.jpg"}, {"id": "nh14", "cat": "inner", "name": "만화·애니 · 칸만화", "file": "p14.jpg"}, {"id": "nh15", "cat": "inner", "name": "관련직업 · 디자인", "file": "p15.jpg"}, {"id": "nh16", "cat": "inner", "name": "관련직업 · 만화·애니", "file": "p16.jpg"}, {"id": "nh17", "cat": "inner", "name": "겨울특강", "file": "p17.jpg"}, {"id": "nh18", "cat": "inner", "name": "1:1 개인 맞춤 컨설팅", "file": "p18.jpg"}, {"id": "nh19", "cat": "inner", "name": "5등급도 인서울", "file": "p19.jpg"}, {"id": "nh20", "cat": "inner", "name": "실기반영 비율 높은 대학", "file": "p20.jpg"}, {"id": "nh21", "cat": "inner", "name": "BEFORE·AFTER 1", "file": "p21.jpg"}, {"id": "nh22", "cat": "inner", "name": "BEFORE·AFTER 2", "file": "p22.jpg"}, {"id": "nh23", "cat": "inner", "name": "BEFORE·AFTER 3", "file": "p23.jpg"}, {"id": "nh24", "cat": "inner", "name": "BEFORE·AFTER 4", "file": "p24.jpg"}, {"id": "nh25", "cat": "inner", "name": "BEFORE·AFTER 5", "file": "p25.jpg"}, {"id": "nh26", "cat": "inner", "name": "BEFORE·AFTER 6", "file": "p26.jpg"}, {"id": "nh27", "cat": "inner", "name": "BEFORE·AFTER 7", "file": "p27.jpg"}, {"id": "nh28", "cat": "inner", "name": "JOB QUEST", "file": "p28.jpg"}];
+const PRE_ELEM = [{"id": "ne01", "cat": "inner", "name": "수상작 성장 스토리", "file": "p01.jpg"}, {"id": "ne02", "cat": "inner", "name": "수상작 1 · 대상·최우수상", "file": "p02.jpg"}, {"id": "ne03", "cat": "inner", "name": "수상작 2 · 대상·온상", "file": "p03.jpg"}, {"id": "ne04", "cat": "inner", "name": "수상작 3 · 동상·장려상", "file": "p04.jpg"}, {"id": "ne05", "cat": "inner", "name": "수상작 4 · 특별상(웹툰)", "file": "p05.jpg"}, {"id": "ne06", "cat": "inner", "name": "수상작 5 · 우수상·장려상", "file": "p06.jpg"}, {"id": "ne07", "cat": "inner", "name": "드로잉 클래스 커리큘럼", "file": "p07.jpg"}, {"id": "ne08", "cat": "inner", "name": "드로잉 클래스", "file": "p08.jpg"}, {"id": "ne09", "cat": "inner", "name": "디지털 클래스 커리큘럼", "file": "p09.jpg"}, {"id": "ne10", "cat": "inner", "name": "디지털 클래스", "file": "p10.jpg"}, {"id": "ne11", "cat": "inner", "name": "김해 앱 시스템 (분홍)", "file": "p11.jpg"}, {"id": "ne12", "cat": "inner", "name": "명지 앱 시스템 (분홍)", "file": "p12.jpg"}, {"id": "ne13", "cat": "inner", "name": "센텀 앱 시스템 (분홍)", "file": "p13.jpg"}, {"id": "ne14", "cat": "inner", "name": "김해 앱 시스템 (초록)", "file": "p14.jpg"}, {"id": "ne15", "cat": "inner", "name": "명지 앱 시스템 (초록)", "file": "p15.jpg"}, {"id": "ne16", "cat": "inner", "name": "센텀 앱 시스템 (초록)", "file": "p16.jpg"}, {"id": "ne17", "cat": "cover", "name": "앞표지 · 김해 정답은 이곳", "file": "p17.jpg"}, {"id": "ne18", "cat": "cover", "name": "뒤표지 · 김해 약도", "file": "p18.jpg"}, {"id": "ne19", "cat": "cover", "name": "앞표지 · 명지 정답은 이곳", "file": "p19.jpg"}, {"id": "ne20", "cat": "cover", "name": "뒤표지 · 명지 약도", "file": "p20.jpg"}, {"id": "ne21", "cat": "cover", "name": "앞표지 · 센텀 정답은 이곳", "file": "p21.jpg"}, {"id": "ne22", "cat": "cover", "name": "뒤표지 · 센텀 약도", "file": "p22.jpg"}];
 const BOOKS = {
-  'note-high': {
-    title: '2026 노트 · 고등부',
+  'note-high-gh': {
+    title: '2026 노트 · 김해 고등부',
     base: '/notes/note-high/',
-    savers: [],   // 「이 구성으로 저장하기」를 쓸 수 있는 캠퍼스 원장 (관리자·제작실장은 항상 가능). 서버 archive-notes의 SAVERS와 같아야 함 — 이 노트는 서버에 없어서 관리자·제작실장만
-    preset: [{"id": "nh01", "cat": "cover", "name": "앞표지 · 김해 정답은 이곳", "file": "p01.jpg"}, {"id": "nh02", "cat": "cover", "name": "뒤표지 · 김해 약도", "file": "p02.jpg"}, {"id": "nh03", "cat": "cover", "name": "앞표지 · 명지 정답은 이곳", "file": "p03.jpg"}, {"id": "nh04", "cat": "cover", "name": "뒤표지 · 명지 약도", "file": "p04.jpg"}, {"id": "nh05", "cat": "cover", "name": "앞표지 · 센텀 정답은 이곳", "file": "p05.jpg"}, {"id": "nh06", "cat": "cover", "name": "뒤표지 · 센텀 약도", "file": "p06.jpg"}, {"id": "nh07", "cat": "inner", "name": "Design Class · 문제제시형 기초디자인", "file": "p07.jpg"}, {"id": "nh08", "cat": "inner", "name": "Design Class · 연출형 기초디자인", "file": "p08.jpg"}, {"id": "nh09", "cat": "inner", "name": "High Class · 기초소양·서울대", "file": "p09.jpg"}, {"id": "nh10", "cat": "inner", "name": "High Class · 기초조형평가·한예종", "file": "p10.jpg"}, {"id": "nh11", "cat": "inner", "name": "만화·애니 Class · 이미지 보드", "file": "p11.jpg"}, {"id": "nh12", "cat": "inner", "name": "만화·애니 · 흑백 칸만화", "file": "p12.jpg"}, {"id": "nh13", "cat": "inner", "name": "만화·애니 · 상황표현", "file": "p13.jpg"}, {"id": "nh14", "cat": "inner", "name": "만화·애니 · 칸만화", "file": "p14.jpg"}, {"id": "nh15", "cat": "inner", "name": "관련직업 · 디자인", "file": "p15.jpg"}, {"id": "nh16", "cat": "inner", "name": "관련직업 · 만화·애니", "file": "p16.jpg"}, {"id": "nh17", "cat": "inner", "name": "겨울특강", "file": "p17.jpg"}, {"id": "nh18", "cat": "inner", "name": "1:1 개인 맞춤 컨설팅", "file": "p18.jpg"}, {"id": "nh19", "cat": "inner", "name": "5등급도 인서울", "file": "p19.jpg"}, {"id": "nh20", "cat": "inner", "name": "실기반영 비율 높은 대학", "file": "p20.jpg"}, {"id": "nh21", "cat": "inner", "name": "BEFORE·AFTER 1", "file": "p21.jpg"}, {"id": "nh22", "cat": "inner", "name": "BEFORE·AFTER 2", "file": "p22.jpg"}, {"id": "nh23", "cat": "inner", "name": "BEFORE·AFTER 3", "file": "p23.jpg"}, {"id": "nh24", "cat": "inner", "name": "BEFORE·AFTER 4", "file": "p24.jpg"}, {"id": "nh25", "cat": "inner", "name": "BEFORE·AFTER 5", "file": "p25.jpg"}, {"id": "nh26", "cat": "inner", "name": "BEFORE·AFTER 6", "file": "p26.jpg"}, {"id": "nh27", "cat": "inner", "name": "BEFORE·AFTER 7", "file": "p27.jpg"}, {"id": "nh28", "cat": "inner", "name": "JOB QUEST", "file": "p28.jpg"}],
+    savers: [],   // 서버 SAVERS에 없는 노트 → 관리자·제작실장만 저장
+    preset: PRE_HIGH,
+    spring: {mode:'single', ratio:R_NOTE, frontCount:13, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'nh01', fcin:'nh07', f1:'nh08', f2:'nh09', f3:'nh10', f4:'nh11', f5:'nh12', f6:'nh13', f7:'nh14', f8:'nh15', f9:'nh16', f10:'nh17', f11:'nh18', f12:'nh19', f13:'nh20', r1:'nh21', r2:'nh22', r3:'nh23', r4:'nh24', r5:'nh25', r6:'nh26', r7:'nh27', bcin:'nh28', back:'nh02'}}
+  },
+  'note-high-mj': {
+    title: '2026 노트 · 명지 고등부',
+    base: '/notes/note-high/',
+    savers: [],   // 서버 SAVERS에 없는 노트 → 관리자·제작실장만 저장
+    preset: PRE_HIGH,
+    spring: {mode:'single', ratio:R_NOTE, frontCount:13, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'nh03', fcin:'nh07', f1:'nh08', f2:'nh09', f3:'nh10', f4:'nh11', f5:'nh12', f6:'nh13', f7:'nh14', f8:'nh15', f9:'nh16', f10:'nh17', f11:'nh18', f12:'nh19', f13:'nh20', r1:'nh21', r2:'nh22', r3:'nh23', r4:'nh24', r5:'nh25', r6:'nh26', r7:'nh27', bcin:'nh28', back:'nh04'}}
+  },
+  'note-high-ct': {
+    title: '2026 노트 · 센텀 고등부',
+    base: '/notes/note-high/',
+    savers: [],   // 서버 SAVERS에 없는 노트 → 관리자·제작실장만 저장
+    preset: PRE_HIGH,
     spring: {mode:'single', ratio:R_NOTE, frontCount:13, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
       fill:{front:'nh05', fcin:'nh07', f1:'nh08', f2:'nh09', f3:'nh10', f4:'nh11', f5:'nh12', f6:'nh13', f7:'nh14', f8:'nh15', f9:'nh16', f10:'nh17', f11:'nh18', f12:'nh19', f13:'nh20', r1:'nh21', r2:'nh22', r3:'nh23', r4:'nh24', r5:'nh25', r6:'nh26', r7:'nh27', bcin:'nh28', back:'nh06'}}
   },
-  'note-elem': {
-    title: '2026 노트 · 초중등부',
+  'note-elem-gh': {
+    title: '2026 노트 · 김해 초중등부',
     base: '/notes/note-elem/',
     savers: [],
-    preset: [{"id": "ne01", "cat": "inner", "name": "수상작 성장 스토리", "file": "p01.jpg"}, {"id": "ne02", "cat": "inner", "name": "수상작 1 · 대상·최우수상", "file": "p02.jpg"}, {"id": "ne03", "cat": "inner", "name": "수상작 2 · 대상·온상", "file": "p03.jpg"}, {"id": "ne04", "cat": "inner", "name": "수상작 3 · 동상·장려상", "file": "p04.jpg"}, {"id": "ne05", "cat": "inner", "name": "수상작 4 · 특별상(웹툰)", "file": "p05.jpg"}, {"id": "ne06", "cat": "inner", "name": "수상작 5 · 우수상·장려상", "file": "p06.jpg"}, {"id": "ne07", "cat": "inner", "name": "드로잉 클래스 커리큘럼", "file": "p07.jpg"}, {"id": "ne08", "cat": "inner", "name": "드로잉 클래스", "file": "p08.jpg"}, {"id": "ne09", "cat": "inner", "name": "디지털 클래스 커리큘럼", "file": "p09.jpg"}, {"id": "ne10", "cat": "inner", "name": "디지털 클래스", "file": "p10.jpg"}, {"id": "ne11", "cat": "inner", "name": "김해 앱 시스템 (분홍)", "file": "p11.jpg"}, {"id": "ne12", "cat": "inner", "name": "명지 앱 시스템 (분홍)", "file": "p12.jpg"}, {"id": "ne13", "cat": "inner", "name": "센텀 앱 시스템 (분홍)", "file": "p13.jpg"}, {"id": "ne14", "cat": "inner", "name": "김해 앱 시스템 (초록)", "file": "p14.jpg"}, {"id": "ne15", "cat": "inner", "name": "명지 앱 시스템 (초록)", "file": "p15.jpg"}, {"id": "ne16", "cat": "inner", "name": "센텀 앱 시스템 (초록)", "file": "p16.jpg"}, {"id": "ne17", "cat": "cover", "name": "앞표지 · 김해 정답은 이곳", "file": "p17.jpg"}, {"id": "ne18", "cat": "cover", "name": "뒤표지 · 김해 약도", "file": "p18.jpg"}, {"id": "ne19", "cat": "cover", "name": "앞표지 · 명지 정답은 이곳", "file": "p19.jpg"}, {"id": "ne20", "cat": "cover", "name": "뒤표지 · 명지 약도", "file": "p20.jpg"}, {"id": "ne21", "cat": "cover", "name": "앞표지 · 센텀 정답은 이곳", "file": "p21.jpg"}, {"id": "ne22", "cat": "cover", "name": "뒤표지 · 센텀 약도", "file": "p22.jpg"}],
-    spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{front:'ne21', fcin:'ne01', f1:'ne02', f2:'ne03', f3:'ne04', f4:'ne05', f5:'ne06', f6:'ne07', f7:'ne08', r1:'ne09', r2:'ne10', r3:'ne11', r4:'ne12', r5:'ne13', r6:'ne14', r7:'ne15', bcin:'ne16', back:'ne22'}}
+    preset: PRE_ELEM,
+    spring: {mode:'single', ratio:R_NOTE, frontCount:5, backCount:5, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'ne17', fcin:'ne01', f1:'ne02', f2:'ne03', f3:'ne04', f4:'ne05', f5:'ne06', r1:'ne07', r2:'ne08', r3:'ne09', r4:'ne10', r5:'ne11', bcin:'ne14', back:'ne18'}}
+  },
+  'note-elem-mj': {
+    title: '2026 노트 · 명지 초중등부',
+    base: '/notes/note-elem/',
+    savers: [],
+    preset: PRE_ELEM,
+    spring: {mode:'single', ratio:R_NOTE, frontCount:5, backCount:5, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'ne19', fcin:'ne01', f1:'ne02', f2:'ne03', f3:'ne04', f4:'ne05', f5:'ne06', r1:'ne07', r2:'ne08', r3:'ne09', r4:'ne10', r5:'ne12', bcin:'ne15', back:'ne20'}}
+  },
+  'note-elem-ct': {
+    title: '2026 노트 · 센텀 초중등부',
+    base: '/notes/note-elem/',
+    savers: [],
+    preset: PRE_ELEM,
+    spring: {mode:'single', ratio:R_NOTE, frontCount:5, backCount:5, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'ne21', fcin:'ne01', f1:'ne02', f2:'ne03', f3:'ne04', f4:'ne05', f5:'ne06', r1:'ne07', r2:'ne08', r3:'ne09', r4:'ne10', r5:'ne13', bcin:'ne16', back:'ne22'}}
   }
 };
-const BOOK = BOOKS[BOOK_ID] || BOOKS['note-high'];
+const BOOK = BOOKS[BOOK_ID] || BOOKS['note-high-ct'];
 window.__noteSavers = BOOK.savers || [];
 document.title = BOOK.title; document.querySelector('h1').textContent = BOOK.title;
 const PRESET = BOOK.preset.map(m => ({id:m.id, cat:m.cat, name:m.name, src:BOOK.base + m.file, wide:false, preset:true}));
