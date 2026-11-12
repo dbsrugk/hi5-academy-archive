@@ -954,7 +954,7 @@ const BOOKS = {
 const BOOK = BOOKS[BOOK_ID] || BOOKS['note-high-ct'];
 window.__noteSavers = BOOK.savers || [];
 document.title = BOOK.title; document.querySelector('h1').textContent = BOOK.title;
-const PRESET = BOOK.preset.map(m => ({id:m.id, cat:m.cat, name:m.name, src:BOOK.base + m.file, wide:false, preset:true}));
+const PRESET = BOOK.preset.map(m => ({id:m.id, cat:m.cat, name:m.name, src:BOOK.base + m.file, wide:false, preset:true, alsoCover:/^표지 안쪽/.test(m.name)}));
 const SPRING = BOOK.spring;
 
 /* ── 상태 (편집 내용은 이 브라우저에 저장) ─────────────────── */
@@ -1374,7 +1374,7 @@ function renderTray(){
   $('upLabel').textContent = state.tab==='cover' ? '＋ 표지 이미지 올리기' : '＋ 속지 이미지 올리기';
   gridEl.innerHTML = '';
   if (state.tab === 'cmt') return renderCmtList();
-  let list = allImgs().filter(i => i.cat === state.tab);
+  let list = allImgs().filter(i => i.cat === state.tab || (state.tab === 'cover' && i.alsoCover));   // 표지 폴더에서 온 '표지 안쪽' 눈송이는 표지 서랍에도 보임
   const tile = im => {
     const t = document.createElement('div');
     t.className = 'tile' + (im.wide ? ' wide' : ''); t.tabIndex = 0; t.setAttribute('role','button'); t.setAttribute('aria-label', im.name + ' 넣기');
@@ -2113,7 +2113,7 @@ const clampN = (v, a, b, d) => Number.isFinite(v) ? Math.max(a, Math.min(b, Math
 function cleanShared(d){
   if (!d || typeof d !== 'object' || !d.layout || typeof d.layout !== 'object') return null;
   const L = d.layout, fill = {};
-  if (L.fill && typeof L.fill === 'object') Object.entries(L.fill).forEach(([k, v]) => { if (/^(D:)?[a-z]{1,5}\d{0,3}$/.test(k) && typeof v === 'string' && /^[su][a-z0-9]{1,24}$/.test(v)) fill[k] = v; });
+  if (L.fill && typeof L.fill === 'object') Object.entries(L.fill).forEach(([k, v]) => { if (/^(D:)?[a-z]{1,5}\d{0,3}$/.test(k) && typeof v === 'string' && /^([su][a-z0-9]{1,24}|n[he]\d\d)$/.test(v)) fill[k] = v; });
   const layout = {mode: L.mode === 'double' ? 'double' : 'single', frontCount:clampN(L.frontCount, 1, 40, 8), backCount:clampN(L.backCount, 0, 40, 8),
     ratio:(+L.ratio >= .5 && +L.ratio <= 1) ? Math.round(+L.ratio * 10000) / 10000 : R_A4,
     linkBack:!!L.linkBack, blankCount:clampN(L.blankCount, 0, 80, 18), blankStyle:BLANK_STYLES.some(b => b[0] === L.blankStyle) ? L.blankStyle : 'lined', fill};
