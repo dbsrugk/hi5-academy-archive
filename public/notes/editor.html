@@ -150,7 +150,17 @@ body.final-on .pg .tag,body.final-on .pg .empty,body.final-on .pg .x{display:non
 .ovrow{display:flex;align-items:center;gap:10px;width:100%;min-width:0}
 .ovbtn{flex:0 0 auto;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);font-size:18px;display:grid;place-items:center;box-shadow:var(--shadow)}
 .ovbtn:disabled{opacity:.3;cursor:default;box-shadow:none}
-.ovview{flex:1;min-width:0;overflow:hidden;padding:4px 2px 6px}
+.ovview{flex:1;min-width:0;overflow-x:auto;overflow-y:hidden;padding:4px 2px 12px;scrollbar-width:auto;scrollbar-color:#8b97a6 #dfe5ec}
+.ovview::-webkit-scrollbar{height:12px}
+.ovview::-webkit-scrollbar-track{background:#dfe5ec;border-radius:8px}
+.ovview::-webkit-scrollbar-thumb{background:#8b97a6;border-radius:8px;border:2px solid #dfe5ec}
+.ovview::-webkit-scrollbar-thumb:hover{background:#5d6b7c}
+/* 표지·뒤표지 카드는 한 쪽만 있어서 태그·캡션을 그림 쪽 절반에 맞춤 */
+.ov:has(.pg.none.L) .ovtag{margin-left:50%}
+.ov:has(.pg.none.L) .cap{padding-left:50%}
+.ov:has(.pg.none.R) .cap{padding-right:50%}
+.ov:has(.pg.none) .cap>span:first-child{display:none}   /* 태그에 이미 앞표지·뒤표지라고 있음 */
+.ov .cap button,.ov .cap .badges{white-space:nowrap;flex:0 0 auto}
 .ovtrack{display:flex;gap:18px;width:max-content}
 .ovtrack .ov{width:clamp(220px,calc((100vh - 470px) * var(--pr2)),520px);flex:0 0 auto}
 .ovtag{align-self:flex-start;font-size:11px;font-weight:600;letter-spacing:.04em;padding:1px 8px;border-radius:8px;background:var(--bg);color:var(--muted);border:1px solid var(--line)}
@@ -171,6 +181,7 @@ body.final-on .pg .tag,body.final-on .pg .empty,body.final-on .pg .x{display:non
 .overview .pg .empty{font-size:10px;inset:8% 8% 11%}
 .overview .pg .empty b{font-size:14px}
 .overview .pg .tag{font-size:9px;padding:0 5px}
+body.mob .pg .tag{font-size:9px;padding:0 5px;top:1.8%;opacity:.88}
 .overview .pg .no{font-size:9px}
 .overview .pg .x{width:20px;height:20px;font-size:11px;top:5px;right:5px}
 .overview .blabel{font-size:10px;padding:5px 9px}
