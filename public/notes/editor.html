@@ -460,6 +460,17 @@ body.reading .pvwrap .zoom::after{content:"";position:absolute;right:0;bottom:0;
 /* 두 줄 모아보기 */
 body.mob .ovm{display:block;flex:1;min-height:0;overflow-y:auto;padding:6px 16px 16px;-webkit-overflow-scrolling:touch}
 .ovmgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 12px}
+.ovmtools{display:flex;gap:8px;margin:0 0 12px}
+.ovmtools button{flex:1;height:38px;border-radius:19px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:13px}
+.ovmtools button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+body.mob .ovm.rowmode{display:flex;flex-direction:column;justify-content:center}
+.ovmgrid.row{display:flex;gap:14px;overflow-x:auto;overflow-y:hidden;padding:4px 2px 14px;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scrollbar-width:auto;scrollbar-color:#8b97a6 #dfe5ec}
+.ovmgrid.row::-webkit-scrollbar{height:12px}
+.ovmgrid.row::-webkit-scrollbar-track{background:#dfe5ec;border-radius:8px}
+.ovmgrid.row::-webkit-scrollbar-thumb{background:#8b97a6;border-radius:8px;border:2px solid #dfe5ec}
+.ovmgrid.row .ovmcard{flex:0 0 min(58vw,250px);scroll-snap-align:start}
+.ovmgrid.row .ovmcard:has(.pgbox.two){flex-basis:min(86vw,400px)}
+.ovmgrid.row .ovmblank{flex:0 0 min(78vw,300px);grid-column:auto}
 .ovmcard{border:0;background:none;padding:0;text-align:left;display:flex;flex-direction:column;gap:6px;min-width:0;color:var(--ink)}
 .ovmcard .pgbox{position:relative;width:100%;aspect-ratio:var(--pr);border-radius:6px;overflow:hidden;box-shadow:0 4px 12px rgba(20,35,55,.2);background:var(--paper)}
 .ovmcard .pgbox.two{aspect-ratio:var(--pr2)}
@@ -588,6 +599,7 @@ body.big.rot .bar{display:none}
     </div>
     <button class="btn" id="shareBtn" disabled>↗ 이 구성으로 저장하기</button>
     <button class="btn" id="openSettings">⚙ 페이지 설정</button>
+    <button class="btn" id="expBtn">⬇ 내려받기</button>
   </header>
 
   <section class="stage" aria-label="노트">
@@ -680,6 +692,7 @@ body.big.rot .bar{display:none}
   <button class="mi" id="miBack" hidden><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg></span><span class="tx">저장된 구성으로 돌아가기</span></button>
   <button class="mi" id="miHist"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12a8 8 0 108-8 8 8 0 00-6 2.7M4 4v4h4M12 8v4l3 2"/></svg></span><span class="tx">이전 저장본 보기 · 되돌리기</span></button>
   <button class="mi" id="miSet"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg></span><span class="tx">페이지 설정<small>쪽수 · 단면/양면 · 백지 · 페이지 크기</small></span></button>
+  <button class="mi" id="miExp"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg></span><span class="tx">최종본 내려받기<small>PDF · 이미지 묶음(ZIP)으로 저장해서 따로 볼 수 있어요</small></span></button>
   <div class="msep"></div>
   <button class="mi" id="miUp"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7 9l5-5 5 5M4 17v3h16v-3"/></svg></span><span class="tx">내 이미지 올리기</span></button>
   <button class="mi" id="miMk"><span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l9 5-9 5-9-5z"/><path d="M3 14l9 5 9-5"/></svg></span><span class="tx">마케팅 제작물에서 불러오기</span></button>
@@ -2688,8 +2701,12 @@ function renderPview(slideDir){
   $('pvClear').disabled = !u.slot || !filled;
 }
 function renderOvm(){
-  const box = $('ovm'), top = box.scrollTop; box.innerHTML = '';
-  const g = document.createElement('div'); g.className = 'ovmgrid';
+  const box = $('ovm'), top = box.scrollTop, rowMode = state.ovmRow !== false, keepX = box.querySelector('.ovmgrid')?.scrollLeft || 0; box.innerHTML = '';
+  box.classList.toggle('rowmode', rowMode);
+  const tools = document.createElement('div'); tools.className = 'ovmtools';
+  [[true, '↔ 가로로 넘기기'], [false, '▦ 두 줄로 보기']].forEach(([v, t]) => { const b = document.createElement('button'); b.textContent = t; b.setAttribute('aria-pressed', String(rowMode === v)); b.onclick = () => { state.ovmRow = v; save(); renderOvm(); }; tools.appendChild(b); });
+  box.appendChild(tools);
+  const g = document.createElement('div'); g.className = 'ovmgrid' + (rowMode ? ' row' : '');
   cUnits().filter(u => state.group === 'all' || unitGroups(u).has(state.group)).forEach(u => {
     if (u.item && u.item.type === 'blank') {
       const b = document.createElement('button'); b.className = 'ovmblank';
@@ -2704,7 +2721,14 @@ function renderOvm(){
     c.onclick = () => { state.ppage = u.id; state.mview = 'page'; save(); renderBook(); };
     g.appendChild(c);
   });
-  box.appendChild(g); box.scrollTop = top;
+  box.appendChild(g); box.scrollTop = top; g.scrollLeft = keepX;
+  if (rowMode) {   // 폰은 스크롤바가 스크롤할 때만 잠깐 보이므로, 항상 보이는 막대(슬라이더)를 같이 둠
+    const rg = document.createElement('input'); rg.type = 'range'; rg.className = 'pvrange ovmrange'; rg.min = 0; rg.max = 1000; rg.value = 0; rg.setAttribute('aria-label', '좌우 위치');
+    const sync = () => { const m = g.scrollWidth - g.clientWidth; rg.value = m > 0 ? Math.round(g.scrollLeft / m * 1000) : 0; rg.disabled = m <= 0; };
+    rg.oninput = () => { g.scrollLeft = (g.scrollWidth - g.clientWidth) * rg.value / 1000; };
+    g.addEventListener('scroll', sync, {passive:true});
+    box.appendChild(rg); requestAnimationFrame(sync);
+  }
 }
 function renderMob(edit, read){
   document.body.classList.toggle('reading', !!read);
@@ -2766,8 +2790,114 @@ $('miShare').onclick = () => { closeMore(); shareNow(); };
 $('miBack').onclick = () => { closeMore(); applyShared(); };
 $('miHist').onclick = () => { closeMore(); openHistory($('tbMore')); };
 $('miSet').onclick = () => { closeMore(); openSettings(); };
+$('miExp').onclick = () => { closeMore(); openExport(); };
 $('miUp').onclick = () => { closeMore(); $('file').click(); };
 $('miMk').onclick = () => { closeMore(); openMk(); };
+
+/* ── 최종본 내려받기: PDF(쪽 순서대로) · 이미지 묶음(ZIP, 쪽마다 JPG) ───────────────── */
+const EXP_W = 1100;
+let expBusy = false;
+const loadImgX = src => new Promise((res, rej) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => res(im); im.onerror = rej; im.src = src; });
+function drawBlankPage(c, w, h, style){
+  c.fillStyle = '#fffdf8'; c.fillRect(0, 0, w, h);
+  c.strokeStyle = '#d9dee6'; c.fillStyle = '#d9dee6'; c.lineWidth = Math.max(1, w / 700);
+  if (style === 'lined') { const u = h / 26; for (let y = h * .09 + u; y < h; y += u) { c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); } }
+  else if (style === 'grid') { const g = h / 34; for (let x = g; x < w; x += g) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); } for (let y = g; y < h; y += g) { c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke(); } }
+  else if (style === 'dot') { const g = h / 34; for (let x = g; x < w; x += g) for (let y = g; y < h; y += g) { c.beginPath(); c.arc(x, y, w / 520, 0, 7); c.fill(); } }
+}
+function drawCoverFit(c, im, sx, sw, w, h){   // 화면과 같은 object-fit: cover
+  const ih = im.naturalHeight, k = Math.max(w / sw, h / ih), dw = sw * k, dh = ih * k;
+  c.drawImage(im, sx, 0, sw, ih, (w - dw) / 2, (h - dh) / 2, dw, dh);
+}
+async function renderExportPage(p, W, H, dmap, cache){
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const c = cv.getContext('2d');
+  if (p.kind === 'blank') { drawBlankPage(c, W, H, state.blankStyle); return cv; }
+  let id = state.fill[p.key], half = -1;
+  if (!id && dmap[p.key]) { id = state.fill[dmap[p.key].slot]; half = dmap[p.key].half; }
+  const m = id && imgById(id);
+  if (m) {
+    try {
+      const im = cache[m.src] || (cache[m.src] = await loadImgX(m.src));
+      c.fillStyle = '#fffdf8'; c.fillRect(0, 0, W, H);
+      if (half < 0) drawCoverFit(c, im, 0, im.naturalWidth, W, H);
+      else drawCoverFit(c, im, half ? im.naturalWidth / 2 : 0, im.naturalWidth / 2, W, H);
+      return cv;
+    } catch(e) {}
+  }
+  c.fillStyle = '#eef1f5'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#8a95a3'; c.textAlign = 'center'; c.font = `${Math.round(W / 22)}px sans-serif`;
+  c.fillText('비어 있음', W / 2, H / 2 - W / 30); c.font = `${Math.round(W / 30)}px sans-serif`; c.fillText(slotName(p.key), W / 2, H / 2 + W / 20);
+  return cv;
+}
+const canvasJpeg = cv => new Promise(res => cv.toBlob(b => b.arrayBuffer().then(a => res(new Uint8Array(a))), 'image/jpeg', .9));
+function makePdf(jpegs, W, H){
+  const enc = new TextEncoder(), parts = [], offs = []; let len = 0;
+  const put = b => { const u = typeof b === 'string' ? enc.encode(b) : b; parts.push(u); len += u.length; };
+  const pw = 420, ph = Math.round(420 * H / W * 100) / 100, n = jpegs.length;
+  put('%PDF-1.4\n');
+  const obj = (id, body, stream) => { offs[id] = len; put(`${id} 0 obj\n${body}`); if (stream) { put('\nstream\n'); put(stream); put('\nendstream'); } put('\nendobj\n'); };
+  obj(1, '<</Type/Catalog/Pages 2 0 R>>');
+  obj(2, `<</Type/Pages/Count ${n}/Kids[${jpegs.map((_, i) => `${3 + i * 3} 0 R`).join(' ')}]>>`);
+  jpegs.forEach((j, i) => {
+    const pid = 3 + i * 3, cid = pid + 1, iid = pid + 2, cs = `q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+    obj(pid, `<</Type/Page/Parent 2 0 R/MediaBox[0 0 ${pw} ${ph}]/Resources<</XObject<</Im0 ${iid} 0 R>>>>/Contents ${cid} 0 R>>`);
+    obj(cid, `<</Length ${cs.length}>>`, enc.encode(cs));
+    obj(iid, `<</Type/XObject/Subtype/Image/Width ${W}/Height ${H}/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ${j.length}>>`, j);
+  });
+  const xr = len, total = 3 + n * 3;
+  put(`xref\n0 ${total}\n0000000000 65535 f \n`);
+  for (let i = 1; i < total; i++) put(String(offs[i]).padStart(10, '0') + ' 00000 n \n');
+  put(`trailer\n<</Size ${total}/Root 1 0 R>>\nstartxref\n${xr}\n%%EOF`);
+  return new Blob(parts, {type:'application/pdf'});
+}
+const CRC_T = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = u => { let c = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) c = CRC_T[(c ^ u[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function makeZip(files){   // [{name, data:Uint8Array}] — 압축 없이 담기(JPG는 이미 압축됨)
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  const u16 = v => [v & 255, (v >> 8) & 255], u32 = v => [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >>> 24) & 255];
+  files.forEach(f => {
+    const nm = enc.encode(f.name), crc = crc32(f.data), sz = f.data.length;
+    const lh = new Uint8Array([0x50,0x4b,3,4, ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0)]);
+    parts.push(lh, nm, f.data);
+    central.push(new Uint8Array([0x50,0x4b,1,2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(crc), ...u32(sz), ...u32(sz), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+    off += lh.length + nm.length + sz;
+  });
+  const cdLen = central.reduce((a, b) => a + b.length, 0);
+  parts.push(...central, new Uint8Array([0x50,0x4b,5,6, 0,0,0,0, ...u16(files.length), ...u16(files.length), ...u32(cdLen), ...u32(off), 0,0]));
+  return new Blob(parts, {type:'application/zip'});
+}
+function saveBlob(blob, name){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+}
+async function runExport(kind){
+  if (expBusy) return; expBusy = true;
+  try {
+    const W = EXP_W, H = Math.round(W / (state.ratio || R_A4)), pages = B.P, dmap = {}, cache = {};
+    B.items.forEach(it => { const s = it.slots[0]; if (s && s.cls === 'D') { dmap[s.pages[0].key] = {slot:s.slot, half:0}; dmap[s.pages[1].key] = {slot:s.slot, half:1}; } });
+    const jpgs = [];
+    for (let i = 0; i < pages.length; i++) {
+      toast(`최종본을 만드는 중이에요… ${i + 1}/${pages.length}`);
+      jpgs.push(await canvasJpeg(await renderExportPage(pages[i], W, H, dmap, cache)));
+      await new Promise(r => setTimeout(r, 0));
+    }
+    const base = BOOK.title.replace(/[\\/:*?"<>|]/g, ' ').trim() + ' 최종본';
+    const nameOf = p => (p.label || (p.kind === 'blank' ? '백지' : GN[p.group] + ' ' + p.no + '쪽')).replace(/[\\/:*?"<>|]/g, '');
+    if (kind === 'pdf') saveBlob(makePdf(jpgs, W, H), base + '.pdf');
+    else saveBlob(makeZip(jpgs.map((d, i) => ({name: String(i + 1).padStart(2, '0') + '_' + nameOf(pages[i]) + '.jpg', data: d}))), base + '.zip');
+    toast(kind === 'pdf' ? `PDF로 저장했어요. (${pages.length}쪽)` : `이미지 ${pages.length}장을 ZIP으로 저장했어요.`);
+  } catch (e) { console.error(e); toast('내려받기에 실패했어요. 잠시 후 다시 해 주세요.'); }
+  expBusy = false;
+}
+function openExport(){
+  closePop(); popState = {type:'export'};
+  pop.innerHTML = '<div class="meta"><b>최종본 내려받기</b><span class="where">지금 구성 그대로</span></div>';
+  const mk = (t, sub, kind) => { const b = document.createElement('button'); b.className = 'btn'; b.style.cssText = 'display:block;width:calc(100% - 20px);margin:8px 10px;text-align:left;height:auto;padding:10px 12px'; b.innerHTML = `<b>${t}</b><br><small style="color:var(--muted)">${sub}</small>`; b.onclick = () => { closePop(); runExport(kind); }; pop.appendChild(b); };
+  mk('📄 PDF로 받기', `앞표지부터 뒤표지까지 ${B.P.length}쪽 · 폰·PC에서 바로 열어 보기`, 'pdf');
+  mk('🖼 이미지로 받기 (ZIP)', '쪽마다 JPG 한 장씩 · 인쇄소·카톡 전달용', 'zip');
+  const r = $('expBtn').getBoundingClientRect(); placePop(MOB ? innerWidth / 2 : r.left - 160, r.bottom + 20);
+}
+$('expBtn').onclick = openExport;
 
 commit();
 })();
