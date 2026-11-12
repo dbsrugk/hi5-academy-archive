@@ -337,7 +337,7 @@ button.upload{font:inherit;background:none;width:100%}
 .panel h2{font-family:var(--f-display);font-size:20px;margin:0;display:flex;justify-content:space-between;align-items:center}
 .panel h2 button{border:0;background:none;font-size:22px;line-height:1;color:var(--muted)}
 .field{display:flex;flex-direction:column;gap:6px}
-.field label,.field .lb{font-weight:600;font-size:13px}
+.field label,.field .flb{font-weight:600;font-size:13px}
 .field .help{color:var(--muted);font-size:12px}
 .field select{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:8px 10px}
 .field select:disabled{opacity:.55}
@@ -676,7 +676,7 @@ body.big.rot .bar{display:none}
 <div class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="ptitle" hidden>
   <h2><span id="ptitle">페이지 설정</span><button id="closeSettings" aria-label="닫기">×</button></h2>
   <div class="field">
-    <span class="lb">속지 이미지 방식</span>
+    <span class="flb">속지 이미지 방식</span>
     <div class="seg two" id="modeSeg" role="group" aria-label="속지 이미지 방식"></div>
     <span class="help" id="modeHelp"></span>
   </div>
@@ -700,7 +700,7 @@ body.big.rot .bar{display:none}
     <select id="backCount"></select>
   </div>
   <div class="field">
-    <span class="lb">백지 종류</span>
+    <span class="flb">백지 종류</span>
     <div class="seg four" id="blankSeg" role="group" aria-label="백지 종류"></div>
   </div>
   <label class="check"><input type="checkbox" id="autoFill">
@@ -888,7 +888,7 @@ body.big.rot .bar{display:none}
 (() => {
 const BOOK_ID = new URLSearchParams(location.search).get('book') || 'note-high-ct';
 const EMBED = window.parent !== window;   // 사이트 안에 끼워 열렸는지
-const KEY = 'hi5-note-' + BOOK_ID + '-v3';   // v3: 명지·센텀에도 표지를 넣으면서 표지가 빈 채 남은 임시 구성을 새로 시작 (v2: 표지·속지 분류 정리)
+const KEY = 'hi5-note-' + BOOK_ID + '-v4';   // v4: 표지 안쪽을 캠퍼스 소개로 바꾸면서 임시 구성 새로 시작 (v3: 명지·센텀에도 표지를 넣으면서 표지가 빈 채 남은 임시 구성을 새로 시작 (v2: 표지·속지 분류 정리)
 const BLANK_STYLES = [['plain','무지'],['lined','줄'],['grid','모눈'],['dot','도트']];
 const R_A4 = .7048, R_SPRING = .7575, R_NOTE = 1808/2434;
 const RATIOS = [[R_A4,'A5 · A4 비율 (148×210)'],[R_NOTE,'노트 (1808×2434)'],[R_SPRING,'봄노트 (1843×2433)'],[.75,'3 : 4']];
@@ -907,48 +907,48 @@ const BOOKS = {
     base: '/notes/note-high/',
     savers: [],   // 서버 SAVERS에 없는 노트 → 관리자·제작실장만 저장
     preset: PRE_HIGH,
-    spring: {mode:'single', ratio:R_NOTE, frontCount:15, backCount:9, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{front:'nh32', fcin:'nh35', f1:'nh01', f2:'nh02', f3:'nh07', f4:'nh08', f5:'nh09', f6:'nh10', f7:'nh11', f8:'nh12', f9:'nh13', f10:'nh14', f11:'nh15', f12:'nh16', f13:'nh17', f14:'nh18', f15:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', r9:'nh28', bcin:'nh36', back:'nh34'}}
+    spring: {mode:'single', ratio:R_NOTE, frontCount:14, backCount:8, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'nh32', fcin:'nh01', f1:'nh02', f2:'nh07', f3:'nh08', f4:'nh09', f5:'nh10', f6:'nh11', f7:'nh12', f8:'nh13', f9:'nh14', f10:'nh15', f11:'nh16', f12:'nh17', f13:'nh18', f14:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', bcin:'nh28', back:'nh34'}}
   },
   'note-high-mj': {
     title: '2026 노트 · 명지 고등부',
     base: '/notes/note-high/',
     savers: [],   // 서버 SAVERS에 없는 노트 → 관리자·제작실장만 저장
     preset: PRE_HIGH,
-    spring: {mode:'single', ratio:R_NOTE, frontCount:15, backCount:9, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{front:'nh32', fcin:'nh35', f1:'nh03', f2:'nh04', f3:'nh07', f4:'nh08', f5:'nh09', f6:'nh10', f7:'nh11', f8:'nh12', f9:'nh13', f10:'nh14', f11:'nh15', f12:'nh16', f13:'nh17', f14:'nh18', f15:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', r9:'nh28', bcin:'nh36', back:'nh34'}}
+    spring: {mode:'single', ratio:R_NOTE, frontCount:14, backCount:8, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'nh32', fcin:'nh03', f1:'nh04', f2:'nh07', f3:'nh08', f4:'nh09', f5:'nh10', f6:'nh11', f7:'nh12', f8:'nh13', f9:'nh14', f10:'nh15', f11:'nh16', f12:'nh17', f13:'nh18', f14:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', bcin:'nh28', back:'nh34'}}
   },
   'note-high-ct': {
     title: '2026 노트 · 센텀 고등부',
     base: '/notes/note-high/',
     savers: [],   // 서버 SAVERS에 없는 노트 → 관리자·제작실장만 저장
     preset: PRE_HIGH,
-    spring: {mode:'single', ratio:R_NOTE, frontCount:15, backCount:9, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{front:'nh32', fcin:'nh35', f1:'nh05', f2:'nh06', f3:'nh07', f4:'nh08', f5:'nh09', f6:'nh10', f7:'nh11', f8:'nh12', f9:'nh13', f10:'nh14', f11:'nh15', f12:'nh16', f13:'nh17', f14:'nh18', f15:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', r9:'nh28', bcin:'nh36', back:'nh34'}}
+    spring: {mode:'single', ratio:R_NOTE, frontCount:14, backCount:8, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'nh32', fcin:'nh05', f1:'nh06', f2:'nh07', f3:'nh08', f4:'nh09', f5:'nh10', f6:'nh11', f7:'nh12', f8:'nh13', f9:'nh14', f10:'nh15', f11:'nh16', f12:'nh17', f13:'nh18', f14:'nh19', r1:'nh20', r2:'nh21', r3:'nh22', r4:'nh23', r5:'nh24', r6:'nh25', r7:'nh26', r8:'nh27', bcin:'nh28', back:'nh34'}}
   },
   'note-elem-gh': {
     title: '2026 노트 · 김해 초중등부',
     base: '/notes/note-elem/',
     savers: [],
     preset: PRE_ELEM,
-    spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{front:'ne23', fcin:'ne29', f1:'ne17', f2:'ne18', f3:'ne01', f4:'ne02', f5:'ne03', f6:'ne04', f7:'ne05', r1:'ne06', r2:'ne07', r3:'ne08', r4:'ne09', r5:'ne10', r6:'ne11', r7:'ne14', bcin:'ne30', back:'ne25'}}
+    spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:5, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'ne23', fcin:'ne17', f1:'ne18', f2:'ne01', f3:'ne02', f4:'ne03', f5:'ne04', f6:'ne05', f7:'ne06', r1:'ne07', r2:'ne08', r3:'ne09', r4:'ne10', r5:'ne11', bcin:'ne14', back:'ne25'}}
   },
   'note-elem-mj': {
     title: '2026 노트 · 명지 초중등부',
     base: '/notes/note-elem/',
     savers: [],
     preset: PRE_ELEM,
-    spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{front:'ne23', fcin:'ne29', f1:'ne19', f2:'ne20', f3:'ne01', f4:'ne02', f5:'ne03', f6:'ne04', f7:'ne05', r1:'ne06', r2:'ne07', r3:'ne08', r4:'ne09', r5:'ne10', r6:'ne12', r7:'ne15', bcin:'ne30', back:'ne25'}}
+    spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:5, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'ne23', fcin:'ne19', f1:'ne20', f2:'ne01', f3:'ne02', f4:'ne03', f5:'ne04', f6:'ne05', f7:'ne06', r1:'ne07', r2:'ne08', r3:'ne09', r4:'ne10', r5:'ne12', bcin:'ne15', back:'ne25'}}
   },
   'note-elem-ct': {
     title: '2026 노트 · 센텀 초중등부',
     base: '/notes/note-elem/',
     savers: [],
     preset: PRE_ELEM,
-    spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:7, linkBack:false, blankCount:18, blankStyle:'lined',
-      fill:{front:'ne23', fcin:'ne29', f1:'ne21', f2:'ne22', f3:'ne01', f4:'ne02', f5:'ne03', f6:'ne04', f7:'ne05', r1:'ne06', r2:'ne07', r3:'ne08', r4:'ne09', r5:'ne10', r6:'ne13', r7:'ne16', bcin:'ne30', back:'ne25'}}
+    spring: {mode:'single', ratio:R_NOTE, frontCount:7, backCount:5, linkBack:false, blankCount:18, blankStyle:'lined',
+      fill:{front:'ne23', fcin:'ne21', f1:'ne22', f2:'ne01', f3:'ne02', f4:'ne03', f5:'ne04', f6:'ne05', f7:'ne06', r1:'ne07', r2:'ne08', r3:'ne09', r4:'ne10', r5:'ne13', bcin:'ne16', back:'ne25'}}
   }
 };
 const BOOK = BOOKS[BOOK_ID] || BOOKS['note-high-ct'];
