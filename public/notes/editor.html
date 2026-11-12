@@ -2341,13 +2341,17 @@ $('doneSettings').onclick = () => {
   const before = JSON.parse(JSON.stringify({...state, uploads:undefined}));
   const valid = new Set([...build({...draft, mode:'single'}).items, ...build({...draft, mode:'double'}).items].flatMap(it => it.slots.map(s => s.slot)));
   const lost = Object.keys(state.fill).filter(k => !valid.has(k));
-  lost.forEach(k => delete state.fill[k]);
+  state.stash = state.stash || {};
+  lost.forEach(k => { state.stash[k] = state.fill[k]; delete state.fill[k]; });   // 쪽수를 줄여 빠진 이미지는 따로 보관 → 쪽수를 다시 늘리면 같은 자리로 돌아옴
   const modeChanged = draft.mode !== state.mode;
   Object.assign(state, draft); sel = null;
+  let back = 0;
+  Object.keys(state.stash).forEach(k => { if (valid.has(k) && !state.fill[k]) { state.fill[k] = state.stash[k]; delete state.stash[k]; back++; } });
   if (modeChanged && !state.cmode) state.tab = 'inner';
   commit(); closeSettings();
   const lostNow = lost.length;
-  if (lostNow) toast(`페이지가 줄어 이미지 ${lostNow}장이 빠졌어요.`, '되돌리기', () => { const up = state.uploads; state = {...before, uploads:up}; commit(); });
+  if (back && !lostNow) toast(`빠졌던 이미지 ${back}장이 제자리로 돌아왔어요.`);
+  else if (lostNow) toast(`페이지가 줄어 이미지 ${lostNow}장이 빠졌어요. (쪽수를 다시 늘리면 돌아와요)`, '되돌리기', () => { const up = state.uploads; state = {...before, uploads:up}; commit(); });
   else if (modeChanged) toast(state.mode === 'double' ? '속지를 양면(펼침 한 장)으로 바꿨어요.' : '속지를 단면(한 쪽씩)으로 바꿨어요.');
   else toast('페이지 구성을 바꿨어요.');
 };
